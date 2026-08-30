@@ -1,0 +1,6 @@
+{
+  "name": "FoodMap",
+  "description": "Hyperlocal food discovery platform connecting residents with local home cooks and food vendors.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
