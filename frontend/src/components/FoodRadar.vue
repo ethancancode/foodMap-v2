@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { foodApi, vendorApi } from '../services/api.js'
 import {
   onFoodAvailabilityUpdated,
@@ -8,6 +8,8 @@ import {
   onFoodDeleted,
   onVendorUpdated
 } from '../services/socket.js'
+import LeafletRadar from './LeafletRadar.vue'
+
 
 const props = defineProps({
   user: Object,
@@ -29,6 +31,8 @@ const liveNotification = ref(null)
 const mobileViewMode = ref('feed') // 'feed' | 'map'
 const isMobileSidebarOpen = ref(false)
 
+const liveCoords = ref(null)
+
 // Haversine distance calculator in meters
 function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   if (!lat1 || !lon1 || !lat2 || !lon2) return 400
@@ -46,50 +50,190 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 const userCoords = computed(() => {
+  // 1. Live browser GPS if available
+  if (liveCoords.value) {
+    return liveCoords.value
+  }
+  // 2. Saved user profile coordinates
   if (props.user?.location?.coordinates) {
     return {
       lng: props.user.location.coordinates[0],
       lat: props.user.location.coordinates[1]
     }
   }
-  return { lng: 72.9355, lat: 19.1468 }
+  // 3. Graceful fallback (Seawoods / Nerul, Navi Mumbai)
+  return { lng: 73.0188, lat: 19.0225 }
 })
 
-// Filtered foods computed list
-const filteredFoods = computed(() => {
-  return foods.value.filter((item) => {
-    // Availability filter
-    if (!item.isAvailable && item.quantity <= 0) return false
+let geoWatchId = null
 
-    // Category filter
-    if (activeFilter.value !== 'all') {
-      if (item.category !== activeFilter.value && !item.tags?.includes(activeFilter.value)) {
-        return false
+function requestLiveLocation() {
+  if ('geolocation' in navigator) {
+    // 1. Immediate fresh position fix
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        liveCoords.value = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        }
+      },
+      (err) => {
+        console.warn('Geolocation access declined or unavailable, using fallback coordinates.', err.message)
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+
+    // 2. Real-time continuous GPS tracking
+    geoWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        liveCoords.value = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        }
+      },
+      (err) => {
+        console.warn('Live location watch error:', err.message)
+      },
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    )
+  }
+}
+
+const locationName = ref('')
+
+async function reverseGeocode(lat, lng) {
+  try {
+    // 1. Try BigDataCloud client reverse geocode (fast, CORS-friendly, no API key needed)
+    const bdcRes = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
+    )
+    if (bdcRes.ok) {
+      const data = await bdcRes.json()
+      const locality = data.locality || data.neighbourhood || data.quarter || ''
+      const city = data.city || data.principalSubdivision || 'Navi Mumbai'
+      if (locality && city) {
+        locationName.value = `${locality}, ${city}`
+        return
+      } else if (locality || city) {
+        locationName.value = locality || city
+        return
       }
     }
+  } catch (e) {
+    // fallback
+  }
 
-    // Diet filter
-    if (selectedDiet.value !== 'all' && item.diet !== selectedDiet.value) {
-      return false
+  try {
+    // 2. Fallback to OpenStreetMap Nominatim
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`, {
+      headers: {
+        'Accept-Language': 'en'
+      }
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.address) {
+        const addr = data.address
+        const sub = addr.suburb || addr.neighbourhood || addr.residential || addr.subdistrict || addr.quarter || addr.city_district
+        const city = addr.city || addr.town || 'Navi Mumbai'
+        if (sub && city) {
+          locationName.value = `${sub}, ${city}`
+          return
+        } else if (sub || city) {
+          locationName.value = sub || city
+          return
+        }
+      }
     }
+  } catch (err) {
+    console.warn('Reverse geocode warning:', err.message)
+  }
 
-    // Search query filter
-    if (searchQuery.value.trim()) {
-      const q = searchQuery.value.toLowerCase()
-      const matchName = item.name?.toLowerCase().includes(q)
-      const matchVendor = item.vendorName?.toLowerCase().includes(q)
-      const matchDesc = item.description?.toLowerCase().includes(q)
-      const matchTag = item.tags?.some((t) => t.toLowerCase().includes(q))
-      if (!matchName && !matchVendor && !matchDesc && !matchTag) return false
+  if (!locationName.value) {
+    locationName.value = 'Navi Mumbai'
+  }
+}
+
+watch(
+  liveCoords,
+  (newCoords) => {
+    if (newCoords?.lat && newCoords?.lng) {
+      reverseGeocode(newCoords.lat, newCoords.lng)
     }
+  },
+  { immediate: true }
+)
 
-    // Distance filter
-    const distLimit = selectedDistance.value === '500m' ? 600 : (selectedDistance.value === '1km' ? 1200 : 3500)
-    const itemCoords = item.location?.coordinates || [72.9342, 19.1458]
-    const dist = calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, itemCoords[1], itemCoords[0])
-    return dist <= distLimit
-  })
-})
+
+function getDistanceLimit(distanceStr) {
+  if (distanceStr === '1km') return 1000;
+  if (distanceStr === '3km') return 3000;
+  return 500;
+}
+
+function getFoodCoords(item) {
+  return item.location?.coordinates || item.vendor?.location?.coordinates || [73.0198, 19.0308];
+}
+
+// Filtered foods computed list using 100% real database coordinates and live socket updates
+const filteredFoods = computed(() => {
+  const distLimit = getDistanceLimit(selectedDistance.value);
+
+  return foods.value
+    .map((item) => {
+      const coords = getFoodCoords(item);
+      const dist = calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, coords[1], coords[0]);
+      return {
+        ...item,
+        location: {
+          type: 'Point',
+          coordinates: coords
+        },
+        calculatedDistance: dist
+      };
+    })
+    .filter((item) => {
+      // Availability filter
+      if (!item.isAvailable && item.quantity <= 0) return false;
+
+      // Category filter
+      if (activeFilter.value !== 'all') {
+        if (item.category !== activeFilter.value && !item.tags?.includes(activeFilter.value)) {
+          return false;
+        }
+      }
+
+      // Diet filter
+      if (selectedDiet.value !== 'all' && item.diet !== selectedDiet.value) {
+        return false;
+      }
+
+      // Search query filter
+      if (searchQuery.value.trim()) {
+        const q = searchQuery.value.toLowerCase();
+        const matchName = item.name?.toLowerCase().includes(q);
+        const matchVendor = item.vendorName?.toLowerCase().includes(q);
+        const matchDesc = item.description?.toLowerCase().includes(q);
+        const matchTag = item.tags?.some((t) => t.toLowerCase().includes(q));
+        if (!matchName && !matchVendor && !matchDesc && !matchTag) return false;
+      }
+
+      // Pure numeric ground distance filter
+      return item.calculatedDistance <= distLimit;
+    });
+});
+
+// Dishes available within the selected distance radius of the user's location
+const foodsInRange = computed(() => {
+  const distLimit = getDistanceLimit(selectedDistance.value);
+  return foods.value.filter((item) => {
+    if (!item.isAvailable && item.quantity <= 0) return false;
+    const coords = getFoodCoords(item);
+    const dist = calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, coords[1], coords[0]);
+    return dist <= distLimit;
+  });
+});
+
 
 async function loadData() {
   try {
@@ -111,7 +255,9 @@ async function loadData() {
 let unsubAvailability, unsubNewPosted, unsubUpdated, unsubDeleted, unsubVendor
 
 onMounted(async () => {
+  requestLiveLocation()
   await loadData()
+
 
   // Real-time listener: Food portions updated (e.g. resident ordered)
   unsubAvailability = onFoodAvailabilityUpdated((data) => {
@@ -160,6 +306,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (geoWatchId !== null && 'geolocation' in navigator) {
+    navigator.geolocation.clearWatch(geoWatchId)
+  }
   if (unsubAvailability) unsubAvailability()
   if (unsubNewPosted) unsubNewPosted()
   if (unsubUpdated) unsubUpdated()
@@ -196,10 +345,30 @@ function openFoodDetail(item) {
   })
 }
 
+const showGuestAuthPrompt = ref(false)
+
+function handleAccountClick() {
+  if (!props.user || props.currentRole === 'guest') {
+    showGuestAuthPrompt.value = true
+  } else {
+    navigateTo('resident_profile')
+  }
+}
+
+function continueAsGuest() {
+  showGuestAuthPrompt.value = false
+}
+
+function goToSignIn() {
+  showGuestAuthPrompt.value = false
+  navigateTo('welcome')
+}
+
 function toggleRole() {
   emit('role-switch', 'vendor')
 }
 </script>
+
 
 <template>
   <div class="component-root w-full min-h-screen bg-background text-on-surface pb-20 lg:pb-0">
@@ -234,42 +403,73 @@ function toggleRole() {
         </button>
       </div>
 
-      <nav class="flex-1 px-base space-y-stack-sm mt-2">
+      <nav class="flex-1 px-4 flex flex-col gap-3 mt-3">
         <button
           @click="navigateTo('food_radar'); isMobileSidebarOpen = false"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg transition-all bg-primary text-on-primary font-bold shadow-sm"
+          class="w-full flex items-center px-4 py-3 rounded-2xl transition-all bg-primary text-on-primary font-bold shadow-sm cursor-pointer"
         >
-          <span class="material-symbols-outlined mr-gutter">explore</span>
-          <span class="font-label-md">Live Radar</span>
+          <span class="material-symbols-outlined mr-3 text-[22px]">explore</span>
+          <span class="font-label-md text-sm">Live Radar</span>
         </button>
-        <button
-          @click="navigateTo('order_status'); isMobileSidebarOpen = false"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all"
+
+        <!-- Guest Exploration Prompt / Role badge -->
+        <div
+          v-if="!props.user || props.currentRole === 'guest'"
+          class="w-full p-4 bg-primary/10 border border-primary/20 rounded-2xl flex flex-col gap-2.5 shadow-xs"
         >
-          <span class="material-symbols-outlined mr-gutter">receipt_long</span>
-          <span class="font-label-md">My Orders</span>
-        </button>
-        <button
-          @click="navigateTo('resident_profile'); isMobileSidebarOpen = false"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all"
-        >
-          <span class="material-symbols-outlined mr-gutter">person</span>
-          <span class="font-label-md">Resident Profile</span>
-        </button>
+          <div class="flex items-center gap-2 text-primary font-bold text-xs">
+            <span class="material-symbols-outlined text-[18px]">travel_explore</span>
+            <span>Guest Mode</span>
+          </div>
+          <p class="text-[11px] text-on-surface-variant leading-relaxed">
+            Sign in to track orders, save kitchens, and customize your profile.
+          </p>
+          <button
+            @click="goToSignIn"
+            class="w-full py-2.5 px-3 bg-primary text-on-primary rounded-xl text-xs font-bold hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+          >
+            <span class="material-symbols-outlined text-[16px]">login</span>
+            <span>Sign In</span>
+          </button>
+        </div>
+
+        <!-- Orders & Profile only for registered users -->
+        <template v-if="props.user && props.currentRole !== 'guest'">
+          <button
+            @click="navigateTo('order_status'); isMobileSidebarOpen = false"
+            class="w-full flex items-center px-4 py-3 rounded-2xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer"
+          >
+            <span class="material-symbols-outlined mr-3 text-[22px]">receipt_long</span>
+            <span class="font-label-md text-sm">My Orders</span>
+          </button>
+          <button
+            @click="navigateTo('resident_profile'); isMobileSidebarOpen = false"
+            class="w-full flex items-center px-4 py-3 rounded-2xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer"
+          >
+            <span class="material-symbols-outlined mr-3 text-[22px]">person</span>
+            <span class="font-label-md text-sm">Resident Profile</span>
+          </button>
+        </template>
       </nav>
+
+
 
       <!-- Sidebar Footer -->
       <div class="px-base py-stack-lg border-t border-outline-variant/20 space-y-stack-sm">
         <div
-          @click="navigateTo('resident_profile'); isMobileSidebarOpen = false"
+          @click="handleAccountClick(); isMobileSidebarOpen = false"
           class="w-full flex items-center gap-gutter px-gutter py-stack-md rounded-xl bg-surface-container-lowest border border-outline-variant/20 hover:border-primary/40 transition-colors text-left cursor-pointer"
         >
           <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-            {{ props.user?.name?.charAt(0) || 'N' }}
+            {{ (!props.user || props.currentRole === 'guest') ? '?' : (props.user?.name?.charAt(0) || 'N') }}
           </div>
           <div class="flex flex-col">
-            <span class="font-label-md text-on-surface leading-none text-xs font-bold">{{ props.user?.name || 'Nikhil' }}</span>
-            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider mt-0.5 font-medium">Bhandup West</span>
+            <span class="font-label-md text-on-surface leading-none text-xs font-bold">
+              {{ (!props.user || props.currentRole === 'guest') ? 'Guest Explorer' : (props.user?.name || 'Nikhil') }}
+            </span>
+            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider mt-0.5 font-medium">
+              {{ (!props.user || props.currentRole === 'guest') ? 'Tap to Sign In' : 'Bhandup West' }}
+            </span>
           </div>
         </div>
 
@@ -278,9 +478,10 @@ function toggleRole() {
           class="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-on-surface-variant hover:text-on-surface hover:bg-surface-container text-xs font-medium transition-colors cursor-pointer"
         >
           <span class="material-symbols-outlined text-[16px]">logout</span>
-          <span>Switch Account</span>
+          <span>{{ (!props.user || props.currentRole === 'guest') ? 'Sign In / Register' : 'Switch Account' }}</span>
         </button>
       </div>
+
     </aside>
 
     <!-- Content Area (Adaptive left margin for desktop vs mobile) -->
@@ -319,6 +520,15 @@ function toggleRole() {
           </div>
 
           <button
+            v-if="!props.user || props.currentRole === 'guest'"
+            @click="goToSignIn"
+            class="flex items-center gap-1.5 bg-primary text-on-primary hover:bg-primary/90 px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl cursor-pointer transition-all shadow-sm font-label-md text-xs font-bold"
+          >
+            <span class="material-symbols-outlined text-[18px]">login</span>
+            <span>Sign In</span>
+          </button>
+          <button
+            v-else
             @click="navigateTo('order_status')"
             class="flex items-center gap-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl cursor-pointer transition-all border border-outline-variant/20 font-label-md text-xs font-bold"
           >
@@ -327,6 +537,7 @@ function toggleRole() {
           </button>
         </div>
       </header>
+
 
       <!-- Main Content -->
       <main class="relative pt-16 lg:pt-20 min-h-screen bg-background">
@@ -348,7 +559,7 @@ function toggleRole() {
               <div class="flex items-center gap-2 mb-0.5">
                 <span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
                 <span class="text-[10px] sm:text-[11px] font-label-sm text-primary tracking-widest uppercase font-bold">Real-time Kitchen Radar</span>
-                <span class="text-[11px] text-on-surface-variant font-medium">• Bhandup West</span>
+                <span class="text-[11px] text-on-surface-variant font-medium">• {{ locationName || (liveCoords ? 'Locating...' : 'Seawoods / Nerul') }}</span>
               </div>
               <h1 class="text-xl sm:text-2xl lg:text-3xl font-display-lg text-on-surface font-bold">Food cooking around you now</h1>
             </div>
@@ -362,7 +573,7 @@ function toggleRole() {
                   :class="activeFilter === 'all' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'"
                   class="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-label-md transition-all cursor-pointer"
                 >
-                  All ({{ foods.length }})
+                  All ({{ foodsInRange.length }})
                 </button>
                 <button
                   @click="activeFilter = 'Main Course'"
@@ -528,7 +739,7 @@ function toggleRole() {
 
                       <span class="inline-flex items-center gap-1 text-on-surface-variant font-semibold">
                         <span class="material-symbols-outlined text-[14px]">directions_walk</span>
-                        {{ calculateDistanceMeters(userCoords.lat, userCoords.lng, item.location?.coordinates?.[1] || 19.1458, item.location?.coordinates?.[0] || 72.9342) }}m
+                        {{ item.calculatedDistance }}m
                       </span>
                     </div>
                   </div>
@@ -538,75 +749,23 @@ function toggleRole() {
 
             <!-- RIGHT: Interactive Live Map Radar (Full height on mobile if toggled, side-by-side on desktop) -->
             <div
-              :class="mobileViewMode === 'map' ? 'flex h-[calc(100vh-140px)]' : 'hidden lg:flex lg:w-[45%] xl:w-[48%] h-full min-h-[620px]'"
-              class="w-full relative rounded-none lg:rounded-tl-3xl overflow-hidden shadow-[-8px_0_32px_rgba(0,0,0,0.05)] bg-surface-container flex-col"
+              :class="mobileViewMode === 'map' ? 'flex h-[calc(100vh-140px)]' : 'hidden lg:flex lg:w-[45%] xl:w-[48%] h-[calc(100vh-190px)] sticky top-[95px]'"
+              class="w-full relative pb-2"
             >
-              <!-- Top Map Overlay Controls -->
-              <div class="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
-                <div class="bg-surface/90 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-md border border-outline-variant/30 flex items-center gap-2 pointer-events-auto">
-                  <span class="w-2.5 h-2.5 rounded-full bg-primary animate-ping"></span>
-                  <span class="text-xs font-bold text-on-surface">Bhandup West Live Map</span>
-                </div>
-                <div class="bg-surface/90 backdrop-blur-md px-3 py-1 rounded-full shadow-md text-xs font-semibold text-on-surface-variant pointer-events-auto">
-                  {{ filteredFoods.length }} Active Dishes
-                </div>
-              </div>
+              <LeafletRadar
+                :userCoords="userCoords"
+                :foods="filteredFoods"
+                :radius="selectedDistance"
+                @select-food="openFoodDetail"
+                @update-location="(coords) => liveCoords = coords"
+              />
 
-              <!-- Map Background Layer -->
-              <div
-                class="absolute inset-0 w-full h-full bg-cover bg-center"
-                style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAmgYv87M6ZS82y69BJ8oD6zbVR1vQIIfN3GZP9eA_X_BJjPdvMx3CUodqBSO0EJ2GMh8mDMYVXh5R-CmHmLdpsHdeWJvcisZ7niwMrbo-cgEHEQtiNqmbgRmqouaOToUe_0hYTrtUGRoBXJWOdi4PJKLTiHUhZnLzDHCRIWCRY8j7p370GZaXuwmYtAWnjTGzY88nlpaIgKbOpMmStX8UjVA2XDBnc0I4rCXsW4ALVWFgUCpbs6niN')"
-              ></div>
-              <div class="absolute inset-0 bg-gradient-to-b from-surface/25 via-transparent to-surface/40 pointer-events-none"></div>
-
-              <!-- Center: Resident Location Pulsing Radar -->
-              <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
-                <!-- Outer Range Ring -->
-                <div class="absolute w-[320px] sm:w-[440px] h-[320px] sm:h-[440px] rounded-full border border-primary/25 bg-primary/5"></div>
-                <!-- Scanning Radar Sweep -->
-                <div
-                  class="absolute w-[320px] sm:w-[440px] h-[320px] sm:h-[440px] rounded-full border border-primary/40 origin-center animate-[spin_10s_linear_infinite]"
-                  style="background: conic-gradient(from 0deg, transparent 70%, rgba(169, 54, 32, 0.15) 100%); clip-path: polygon(50% 50%, 100% 0, 100% 100%);"
-                ></div>
-                <!-- User Core Marker -->
-                <div class="relative w-7 h-7 bg-primary rounded-full border-4 border-surface shadow-xl z-10 flex items-center justify-center">
-                  <div class="absolute w-full h-full rounded-full bg-primary animate-ping opacity-60"></div>
-                </div>
-                <div class="absolute mt-12 bg-surface/95 backdrop-blur-sm px-2.5 py-0.5 rounded-full shadow-md text-[10px] font-bold text-on-surface border border-outline-variant/20">
-                  Your Location
-                </div>
-              </div>
-
-              <!-- Dynamic Map Pins mapped from actual foods -->
-              <div
-                v-for="(food, i) in filteredFoods.slice(0, 8)"
-                :key="food._id || food.id"
-                @click="openFoodDetail(food)"
-                :style="{
-                  top: `${32 + ((i % 3) * 20) + ((i % 2) * 5)}%`,
-                  left: `${20 + ((i * 18) % 60)}%`
-                }"
-                class="absolute pointer-events-auto cursor-pointer group z-20 transition-transform duration-200 hover:scale-110"
-              >
-                <!-- Pin Box -->
-                <div class="bg-surface/95 backdrop-blur-md rounded-2xl p-1.5 shadow-xl border border-primary/30 group-hover:border-primary flex items-center gap-2 pr-3">
-                  <img :src="food.image" class="w-8 h-8 rounded-xl object-cover" />
-                  <div class="flex flex-col">
-                    <span class="text-[11px] font-bold text-on-surface leading-tight max-w-[100px] truncate">{{ food.name }}</span>
-                    <div class="flex items-center gap-1">
-                      <span class="text-[10px] font-extrabold text-primary">₹{{ food.price }}</span>
-                      <span class="text-[9px] text-green-600 font-bold">• {{ food.quantity }} left</span>
-                    </div>
-                  </div>
-                </div>
-                <!-- Pin pointer arrow -->
-                <div class="w-2.5 h-2.5 bg-surface rotate-45 border-r border-b border-primary/30 mx-auto -mt-1 shadow-sm"></div>
-              </div>
             </div>
           </div>
         </div>
       </main>
     </div>
+
 
     <!-- Mobile Bottom Navigation Bar (Fixed for quick 1-thumb reachability) -->
     <nav class="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface/95 backdrop-blur-xl border-t border-outline-variant/30 z-50 flex items-center justify-around px-2 shadow-lg">
@@ -625,22 +784,70 @@ function toggleRole() {
         <span class="text-[10px] font-semibold mt-0.5">{{ mobileViewMode === 'map' ? 'Feed' : 'Map' }}</span>
       </button>
       <button
+        v-if="props.user && props.currentRole !== 'guest'"
         @click="navigateTo('order_status')"
         class="flex flex-col items-center justify-center flex-1 py-1 text-on-surface-variant hover:text-primary"
       >
         <span class="material-symbols-outlined text-[22px]">receipt_long</span>
         <span class="text-[10px] font-semibold mt-0.5">Orders</span>
       </button>
+
       <button
-        @click="navigateTo('resident_profile')"
+        @click="handleAccountClick()"
         class="flex flex-col items-center justify-center flex-1 py-1 text-on-surface-variant hover:text-primary"
       >
         <span class="material-symbols-outlined text-[22px]">person</span>
         <span class="text-[10px] font-semibold mt-0.5">Profile</span>
       </button>
+
     </nav>
+
+    <!-- Custom Guest Sign In / Explore Prompt Toast -->
+    <Transition name="guest-toast">
+      <div
+        v-if="showGuestAuthPrompt"
+        class="fixed bottom-20 lg:bottom-6 left-1/2 -translate-x-1/2 z-[100] w-[92vw] max-w-md bg-surface-container-highest/95 backdrop-blur-xl border border-primary/30 rounded-2xl shadow-2xl p-4 flex flex-col gap-3"
+      >
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[22px]">lock_open</span>
+          </div>
+          <div class="flex flex-col flex-1">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-on-surface">Sign in to FoodMap</span>
+              <button
+                @click="continueAsGuest"
+                class="text-on-surface-variant hover:text-on-surface p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <p class="text-xs text-on-surface-variant mt-0.5">
+              You are currently exploring as a guest. Sign in to place orders, save favorite kitchens, and access your profile.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 pt-1 border-t border-outline-variant/20">
+          <button
+            @click="continueAsGuest"
+            class="flex-1 py-2 px-3 rounded-xl border border-outline-variant/40 hover:bg-surface-container text-on-surface text-xs font-bold transition-all cursor-pointer text-center"
+          >
+            Continue without
+          </button>
+          <button
+            @click="goToSignIn"
+            class="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary/90 text-on-primary text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <span class="material-symbols-outlined text-[16px]">login</span>
+            <span>Sign In Now</span>
+          </button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
+
 
 <style scoped>
 .slide-fade-enter-active {
@@ -654,4 +861,17 @@ function toggleRole() {
   transform: translateY(-20px) translateX(-50%);
   opacity: 0;
 }
+
+.guest-toast-enter-active {
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.guest-toast-leave-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 1, 1);
+}
+.guest-toast-enter-from,
+.guest-toast-leave-to {
+  transform: translateY(40px) translateX(-50%) scale(0.95);
+  opacity: 0;
+}
 </style>
+

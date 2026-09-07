@@ -47,4 +47,29 @@ export const router = createRouter({
   routes,
 });
 
+// Route Guard: Protect registered routes from guests
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem('foodmap_token');
+  const protectedRoutes = [
+    '/resident-profile',
+    '/order-status',
+    '/order-pickup',
+    '/order-completed',
+    '/vendor-dashboard',
+    '/post-food',
+    '/you-are-live',
+    '/vendor-order-confirmed',
+    '/vendor-profile',
+    '/edit-vendor-profile',
+  ];
+
+  if (protectedRoutes.includes(to.path) && !token) {
+    // Guest tried to access protected profile or order route -> redirect to welcome / login
+    next({ path: '/', query: { redirect: to.fullPath } });
+  } else {
+    next();
+  }
+});
+
 export default router;
+

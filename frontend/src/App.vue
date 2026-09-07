@@ -26,10 +26,42 @@ import EditVendorProfile from './components/EditVendorProfile.vue'
 import RoleSelection from './components/RoleSelection.vue'
 import OTPVerification from './components/OTPVerification.vue'
 
+import { useRouter, useRoute } from 'vue-router'
+
+const router = useRouter()
+const route = useRoute()
+
 const authStore = useAuthStore()
 const foodStore = useFoodStore()
 const orderStore = useOrderStore()
 const vendorStore = useVendorStore()
+
+// Mapping between screenId and URL route paths
+const screenToPath = {
+  welcome: '/',
+  food_radar: '/radar',
+  food_details: '/food-details',
+  checkout: '/checkout',
+  order_confirmation: '/order-confirmation',
+  order_status: '/order-status',
+  order_pickup: '/order-pickup',
+  order_completed: '/order-completed',
+  resident_profile: '/resident-profile',
+  vendor_dashboard: '/vendor-dashboard',
+  post_new_food: '/post-food',
+  you_are_live: '/you-are-live',
+  new_order: '/new-order',
+  vendor_order_confirmed: '/vendor-order-confirmed',
+  vendor_profile: '/vendor-profile',
+  edit_vendor_profile: '/edit-vendor-profile',
+  role_selection: '/role-selection',
+  otp_verification: '/otp',
+}
+
+const pathToScreen = Object.fromEntries(
+  Object.entries(screenToPath).map(([screen, path]) => [path, screen])
+)
+pathToScreen['/welcome'] = 'welcome'
 
 // Screens registry
 const screenComponents = {
@@ -53,9 +85,12 @@ const screenComponents = {
   otp_verification: OTPVerification,
 }
 
-// Navigation state
-const currentScreenId = ref('welcome')
-const navigationHistory = ref(['welcome'])
+// Drive active screen directly from current URL path
+const currentScreenId = computed(() => {
+  return pathToScreen[route.path] || 'welcome'
+})
+
+
 
 const currentScreen = computed(() => {
   return screenComponents[currentScreenId.value] || Welcome_to_FoodMap
@@ -102,8 +137,7 @@ function navigateTo(target, payload = null) {
     targetId = currentRole.value === 'vendor' ? 'vendor_profile' : 'resident_profile'
   } else if (targetId === 'welcome' || targetId === 'logout') {
     authStore.logout()
-    currentScreenId.value = 'welcome'
-    navigationHistory.value = ['welcome']
+    router.push('/')
     window.scrollTo({ top: 0, behavior: 'smooth' })
     return
   } else if (targetId === 'back') {
@@ -123,22 +157,23 @@ function navigateTo(target, payload = null) {
     }
   }
 
-  if (screenComponents[targetId]) {
-    currentScreenId.value = targetId
-    navigationHistory.value.push(targetId)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  const targetPath = screenToPath[targetId] || '/'
+  if (route.path !== targetPath) {
+    router.push(targetPath)
   }
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function goBack() {
-  if (navigationHistory.value.length > 1) {
-    navigationHistory.value.pop()
-    currentScreenId.value = navigationHistory.value[navigationHistory.value.length - 1]
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  if (window.history.length > 1) {
+    router.back()
   } else {
-    currentScreenId.value = currentRole.value === 'vendor' ? 'vendor_dashboard' : 'food_radar'
+    const fallbackPath = currentRole.value === 'vendor' ? '/vendor-dashboard' : '/radar'
+    router.push(fallbackPath)
   }
 }
+
+
 
 function handleAuthSuccess(authData) {
   if (authStore.currentRole === 'vendor' || authStore.user?.role === 'vendor') {
@@ -175,8 +210,7 @@ function handleAction(event) {
     showToast(payload?.message || 'Updated successfully')
   } else if (action === 'logout') {
     authStore.logout()
-    currentScreenId.value = 'welcome'
-    navigationHistory.value = ['welcome']
+    router.push('/')
     showToast('Logged out successfully')
   } else if (action === 'set-role' || action === 'switch-role') {
     handleRoleSwitch(payload?.role || (currentRole.value === 'resident' ? 'vendor' : 'resident'))
@@ -202,13 +236,12 @@ onMounted(async () => {
   try {
     getSocket()
     await authStore.initAuth()
-    if (authStore.isAuthenticated && authStore.user) {
+    // If user is at root and already authenticated, direct to their home screen
+    if (route.path === '/' && authStore.isAuthenticated && authStore.user) {
       if (authStore.user.role === 'vendor') {
-        currentScreenId.value = 'vendor_dashboard'
-        navigationHistory.value = ['vendor_dashboard']
+        router.push('/vendor-dashboard')
       } else {
-        currentScreenId.value = 'food_radar'
-        navigationHistory.value = ['food_radar']
+        router.push('/radar')
       }
     }
     foodStore.fetchFoods()
@@ -218,6 +251,7 @@ onMounted(async () => {
     console.warn('[App Init Warning]', e.message)
   }
 })
+
 </script>
 
 <template>

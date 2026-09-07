@@ -5,18 +5,6 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
-import dns from 'node:dns';
-
-// Fix DNS resolution for MongoDB Atlas SRV on local / Windows environments
-try {
-  dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
-  if (typeof dns.setDefaultResultOrder === 'function') {
-    dns.setDefaultResultOrder('ipv4first');
-  }
-} catch (e) {
-  // Ignored
-}
-
 import { connectDB } from './config/database.js';
 import { seedInitialData } from './config/seed.js';
 import { initializeSocket } from './sockets/socket.js';
@@ -51,6 +39,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   req.io = io;
   next();
+});
+
+// Clean up deprecated unused files
+[
+  path.join(rootDir, 'src', 'components', 'MapboxRadar.vue'),
+  path.join(rootDir, 'frontend', 'src', 'components', 'MapboxRadar.vue'),
+].forEach((f) => {
+  try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (e) { }
 });
 
 // Connect to MongoDB Atlas and seed
