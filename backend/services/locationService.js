@@ -28,6 +28,6 @@ export async function updateUserLocation(userId, lng, lat, address) {
         address: address || 'Bhandup West, Mumbai',
       },
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
 }

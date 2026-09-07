@@ -13,7 +13,11 @@ const emit = defineEmits(['navigate', 'action', 'role-switch'])
 // Reactive State
 const quantity = ref(props.food?.quantity || 1)
 const fulfillment = ref('pickup') // 'pickup' | 'delivery'
-const deliveryAddress = ref(props.user?.location || '402, Sunshine Apts, Bhandup West, Mumbai')
+const deliveryAddress = ref(
+  props.user?.location?.address ||
+  props.user?.location?.pickupAddress ||
+  (typeof props.user?.location === 'string' && !props.user.location.startsWith('{') ? props.user.location : '402, Sunshine Apts, Bhandup West, Mumbai')
+)
 const specialInstructions = ref('')
 const isPaying = ref(false)
 const errorMessage = ref('')
@@ -21,7 +25,11 @@ const errorMessage = ref('')
 const foodId = computed(() => props.food?.id || props.food?._id)
 const itemPrice = computed(() => props.food?.price || 80)
 const itemName = computed(() => props.food?.name || 'Authentic Rajma Chawal')
-const vendorName = computed(() => props.food?.vendorName || "Anjali's Kitchen")
+const vendorName = computed(() => {
+  const v = props.food?.vendorName || props.food?.vendor
+  if (typeof v === 'string') return v
+  return v?.businessName || v?.name || 'Priya Kitchen'
+})
 const itemImage = computed(() => props.food?.image || 'https://lh3.googleusercontent.com/aida-public/AB6AXuDafFZxnWsDWN7qKTYJnlTescjOm7k0iERE7lKpfB2DOFewnAuGRBkf4ocUXtqvpZjmz4KSOsOwe0aehBprIbEbO5OsklrbQYgCBG9xttPncOkUpk0NfRBo3K1JNZ0JaKdRffcxRpp3PdQwd0wbScixFwGCqcCVtTQ1rdSuLc0IiwmCzy9S0x2m6XrpiQz_ZzicvlbR_1YKJQ3q_8f11-3P0U9xKJp0RriHs6Qe-O6D7xbA8SS-rGMs')
 const maxAvailable = computed(() => props.food?.portions || 10)
 
@@ -66,12 +74,17 @@ async function processPayment() {
     const orderObj = res?.order || res?.data || res
     if (orderObj && (orderObj._id || orderObj.orderNumber)) {
       emit('action', { action: 'toast', payload: { message: `Order #${orderObj.orderNumber} placed successfully!` } })
+      const finalVendor = (typeof orderObj.vendorName === 'string' && orderObj.vendorName)
+        ? orderObj.vendorName
+        : (typeof orderObj.vendor === 'string' ? orderObj.vendor : (orderObj.vendor?.businessName || vendorName.value || 'Priya Kitchen'))
+
       emit('navigate', 'order_confirmation', {
         order: {
           id: orderObj.orderNumber || orderObj._id,
           _id: orderObj._id,
           item: orderObj.foodName || orderObj.itemSummary || itemName.value,
-          vendor: orderObj.vendorName || orderObj.vendor?.businessName || vendorName.value,
+          vendor: finalVendor,
+          vendorName: finalVendor,
           qty: orderObj.quantity || quantity.value,
           pricePerPortion: orderObj.pricePerUnit || itemPrice.value,
           deliveryFee: deliveryFee.value,

@@ -38,6 +38,14 @@ const foodAvailabilitySchema = new mongoose.Schema(
   }
 );
 
+foodAvailabilitySchema.virtual('isAvailable').get(function () {
+  return this.available !== false && this.quantity > 0;
+});
+
+foodAvailabilitySchema.set('toJSON', { virtuals: true });
+foodAvailabilitySchema.set('toObject', { virtuals: true });
+
 export const FoodAvailability =
   mongoose.models.FoodAvailability || mongoose.model('FoodAvailability', foodAvailabilitySchema);
 export default FoodAvailability;
+

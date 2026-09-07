@@ -10,5 +10,6 @@ router.post('/request-otp', validate(requestOtpSchema), authController.requestOT
 router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOTP);
 router.get('/me', protect, authController.getMe);
 router.put('/profile', protect, authController.updateProfile);
+router.post('/complete-onboarding', protect, authController.completeOnboarding);
 
 export default router;

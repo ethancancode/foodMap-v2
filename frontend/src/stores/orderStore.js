@@ -4,26 +4,7 @@ import { getSocket, subscribeToOrder } from '../services/socket.js';
 
 export const useOrderStore = defineStore('order', {
   state: () => ({
-    currentOrder: {
-      id: '#FM1024',
-      orderNumber: '#FM1024',
-      item: 'Authentic Rajma Chawal',
-      vendor: "Anjali's Kitchen",
-      qty: 2,
-      pricePerPortion: 80,
-      subtotal: 160,
-      deliveryFee: 30,
-      platformFee: 5,
-      total: 195,
-      totalAmount: 195,
-      status: 'PREPARING',
-      pickupLocation: 'Wing B, Flat 402, Green Meadows, Bhandup West',
-      time: '12:45 PM',
-      timeline: [
-        { status: 'ACCEPTED', timestamp: new Date(), note: 'Kitchen accepted your order' },
-        { status: 'PREPARING', timestamp: new Date(), note: 'Simmering hot Rajma & steamed rice' },
-      ],
-    },
+    currentOrder: null,
     orders: [],
     initialized: false,
   }),

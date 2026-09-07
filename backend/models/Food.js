@@ -51,6 +51,9 @@ const foodSchema = new mongoose.Schema(
       type: String,
       default: 'Ready now',
     },
+    readyAt: {
+      type: Date,
+    },
     available: {
       type: Boolean,
       default: true,
@@ -84,13 +87,25 @@ const foodSchema = new mongoose.Schema(
         default: [72.9348, 19.1462],
       },
     },
+    pickupAddress: {
+      type: String,
+      default: 'Navi Mumbai, Thane',
+    },
   },
   {
     timestamps: true,
   }
 );
 
+foodSchema.virtual('isAvailable').get(function () {
+  return this.available !== false && this.quantity > 0;
+});
+
+foodSchema.set('toJSON', { virtuals: true });
+foodSchema.set('toObject', { virtuals: true });
+
 foodSchema.index({ location: '2dsphere' });
 
 export const Food = mongoose.models.Food || mongoose.model('Food', foodSchema);
 export default Food;
+

@@ -9,10 +9,16 @@ const props = defineProps({
 
 const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
+function formatVendorName(val) {
+  if (!val) return 'Priya Kitchen'
+  if (typeof val === 'string') return val
+  return val.businessName || val.name || 'Priya Kitchen'
+}
+
 const orderInfo = computed(() => ({
   id: props.order?.id || '#FM1024',
   item: props.order?.item || 'Authentic Rajma Chawal',
-  vendor: props.order?.vendor || "Anjali's Kitchen",
+  vendor: formatVendorName(props.order?.vendorName || props.order?.vendor),
   qty: props.order?.qty || 2,
   price: props.order?.total || 195
 }))

@@ -1,23 +1,161 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useAuthStore } from '../stores/authStore.js'
+import { authApi, vendorApi } from '../services/api.js'
+import LocationPickerModal from './LocationPickerModal.vue'
 
 const emit = defineEmits(['auth-success', 'explore-guest', 'role-selected'])
 
 const authStore = useAuthStore()
 
 // State Management
-const currentStep = ref('roles') // 'roles' | 'phone' | 'otp' | 'success'
+const currentStep = ref('roles') // 'roles' | 'phone' | 'otp' | 'vendor-onboarding' | 'success'
 const selectedRole = ref('resident') // 'resident' | 'vendor'
 const phoneNumber = ref('')
 const phoneError = ref('')
 const otpError = ref('')
+const onboardingError = ref('')
 const isSubmitting = ref(false)
 const OTP_LENGTH = 6
 const otpDigits = ref(Array(OTP_LENGTH).fill(''))
 const otpInputs = ref([])
 const resendTimer = ref(30)
 let timerInterval = null
+
+// Custom in-app Toast Notification state (replaces native HTML5 browser popups)
+const toast = ref({
+  show: false,
+  message: '',
+  type: 'warning',
+  timer: null,
+})
+
+const formErrors = ref({
+  chefName: false,
+  kitchenName: false,
+  pickupAddress: false,
+})
+
+function showToast(message, type = 'warning') {
+  if (toast.value.timer) clearTimeout(toast.value.timer)
+  toast.value = {
+    show: true,
+    message,
+    type,
+    timer: setTimeout(() => {
+      toast.value.show = false
+    }, 3800),
+  }
+}
+
+// New Vendor Onboarding Details (Prompted ONLY for new vendor accounts after OTP)
+const chefName = ref('')
+const kitchenName = ref('')
+const specialties = ref('')
+const pickupAddress = ref('')
+const coordinates = ref([73.0188, 19.0225])
+const isLocating = ref(false)
+const isMapModalOpen = ref(false)
+
+// Step 5: Trust & Kitchen Story (Bio & Experience)
+const experience = ref('')
+const bio = ref('')
+
+// Step 6: Kitchen Photos (PFP and Cover Banner)
+const avatarImage = ref('')
+const coverImage = ref('')
+const avatarFileInput = ref(null)
+const coverFileInput = ref(null)
+
+const hasStoryContent = computed(() => {
+  return Boolean(experience.value.trim() || bio.value.trim())
+})
+
+const hasPhotoContent = computed(() => {
+  return Boolean(avatarImage.value || coverImage.value)
+})
+
+function handleAvatarFileChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) {
+    onboardingError.value = 'Profile picture should be less than 5MB'
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = (event) => {
+    avatarImage.value = event.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+function handleCoverFileChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) {
+    onboardingError.value = 'Cover banner should be less than 5MB'
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = (event) => {
+    coverImage.value = event.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+function removeAvatar() {
+  avatarImage.value = ''
+  if (avatarFileInput.value) avatarFileInput.value.value = ''
+}
+
+function removeCover() {
+  coverImage.value = ''
+  if (coverFileInput.value) coverFileInput.value.value = ''
+}
+
+function openMapModal() {
+  isMapModalOpen.value = true
+}
+
+function handleLocationConfirmed(loc) {
+  coordinates.value = loc.coordinates
+  pickupAddress.value = loc.address
+  formErrors.value.pickupAddress = false
+  isMapModalOpen.value = false
+}
+
+async function detectCurrentLocation() {
+  if (!('geolocation' in navigator)) return
+  isLocating.value = true
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude
+      const lng = pos.coords.longitude
+      coordinates.value = [lng, lat]
+      try {
+        const bdcRes = await fetch(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
+        )
+        if (bdcRes.ok) {
+          const data = await bdcRes.json()
+          const locality = data.locality || data.neighbourhood || data.quarter || ''
+          const city = data.city || data.principalSubdivision || 'Navi Mumbai'
+          pickupAddress.value = locality ? `${locality}, ${city}` : city
+        }
+      } catch (e) {
+        pickupAddress.value = 'Seawoods, Navi Mumbai'
+      } finally {
+        isLocating.value = false
+      }
+    },
+    (err) => {
+      console.warn('Geolocation declined', err.message)
+      pickupAddress.value = 'Seawoods, Navi Mumbai'
+      isLocating.value = false
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  )
+}
 
 function formattedPhone() {
   return `+91${phoneNumber.value}`
@@ -151,21 +289,101 @@ async function verifyOtp() {
   otpError.value = ''
 
   try {
-    await authStore.verifyOtp({
+    const res = await authStore.verifyOtp({
       phone: formattedPhone(),
       otp: otpDigits.value.join(''),
     })
-    currentStep.value = 'success'
-    emit('auth-success', {
-      role: authStore.user?.role || selectedRole.value,
-      phone: phoneNumber.value,
-    })
+
+    const isNewUser = Boolean(res?.isNewUser)
+    const isVendor = (authStore.user?.role === 'vendor' || selectedRole.value === 'vendor')
+
+    // If it's a new vendor account, prompt for kitchen setup before entering
+    if (isNewUser && isVendor) {
+      currentStep.value = 'vendor-onboarding'
+      if (!pickupAddress.value) {
+        detectCurrentLocation()
+      }
+    } else {
+      // Returning user or resident: go straight to dashboard/app
+      currentStep.value = 'success'
+      emit('auth-success', {
+        role: authStore.user?.role || selectedRole.value,
+        phone: phoneNumber.value,
+      })
+    }
   } catch (err) {
     otpError.value = err.message || 'Invalid verification code. Please try again.'
     otpDigits.value = Array(OTP_LENGTH).fill('')
     if (otpInputs.value[0]) {
       otpInputs.value[0].focus()
     }
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+function proceedToStory() {
+  formErrors.value = {
+    chefName: false,
+    kitchenName: false,
+    pickupAddress: false,
+  }
+
+  if (!kitchenName.value.trim() && !chefName.value.trim()) {
+    formErrors.value.chefName = true
+    formErrors.value.kitchenName = true
+    onboardingError.value = 'Please enter your name or kitchen name'
+    showToast('Please enter your name or kitchen name to continue', 'warning')
+    return
+  }
+
+  if (!pickupAddress.value.trim()) {
+    formErrors.value.pickupAddress = true
+    onboardingError.value = 'Please choose your kitchen pickup location'
+    showToast('Please set your kitchen pickup location', 'warning')
+    return
+  }
+
+  onboardingError.value = ''
+  currentStep.value = 'vendor-story'
+}
+
+function proceedToPhotos(skipStory = false) {
+  if (skipStory) {
+    experience.value = ''
+    bio.value = ''
+  }
+  onboardingError.value = ''
+  currentStep.value = 'vendor-photos'
+}
+
+async function finalizeVendorSetup({ skipPhotos = false } = {}) {
+  isSubmitting.value = true
+  onboardingError.value = ''
+
+  try {
+    const payload = {
+      name: chefName.value.trim() || undefined,
+      businessName: kitchenName.value.trim() || (chefName.value.trim() ? `${chefName.value.trim()}'s Kitchen` : 'My Kitchen'),
+      category: specialties.value.trim() || 'Home Cook • Homemade Specialties',
+      pickupAddress: pickupAddress.value.trim(),
+      coordinates: coordinates.value && coordinates.value.length === 2 ? coordinates.value : [73.0188, 19.0225],
+      experience: experience.value.trim() || undefined,
+      bio: bio.value.trim() || undefined,
+      avatar: skipPhotos ? '' : (avatarImage.value || ''),
+      coverImage: skipPhotos ? '' : (coverImage.value || ''),
+    }
+
+    // Atomically finalizes the vendor account in DB and saves session token
+    await authStore.completeOnboarding(payload)
+
+    currentStep.value = 'success'
+    emit('auth-success', {
+      role: 'vendor',
+      phone: phoneNumber.value,
+    })
+  } catch (err) {
+    onboardingError.value = err.response?.data?.message || err.message || 'Could not save kitchen profile. Please try again.'
   } finally {
     isSubmitting.value = false
   }
@@ -313,6 +531,32 @@ onBeforeUnmount(() => {
                     {{ authStore.isEnrolled ? 'Open Google Authenticator on your phone' : 'Scan the QR code to connect your account' }}
                   </p>
                 </div>
+                <div v-else-if="currentStep === 'vendor-onboarding'" key="header-onboarding" class="heading-group">
+                  <h2 class="title-main">Set Up Kitchen Profile 👨‍🍳</h2>
+                  <p class="subtitle-main">
+                    Welcome to FoodMap! Tell your neighborhood about your home kitchen and specialties.
+                  </p>
+                </div>
+                <div v-else-if="currentStep === 'vendor-story'" key="header-story" class="heading-group">
+                  <div class="back-link" @click="() => { currentStep = 'vendor-onboarding'; onboardingError = '' }">
+                    <span class="material-symbols-outlined icon-back">arrow_back</span>
+                    <span>Back to Details</span>
+                  </div>
+                  <h2 class="title-main">Story & Experience 📖</h2>
+                  <p class="subtitle-main">
+                    Tell your neighborhood what makes your cooking special (optional, can skip for now).
+                  </p>
+                </div>
+                <div v-else-if="currentStep === 'vendor-photos'" key="header-photos" class="heading-group">
+                  <div class="back-link" @click="() => { currentStep = 'vendor-story'; onboardingError = '' }">
+                    <span class="material-symbols-outlined icon-back">arrow_back</span>
+                    <span>Back to Story</span>
+                  </div>
+                  <h2 class="title-main">Kitchen Photos 📸</h2>
+                  <p class="subtitle-main">
+                    Add a profile picture and cover banner for your kitchen (optional, can skip for now).
+                  </p>
+                </div>
                 <div v-else-if="currentStep === 'success'" key="header-success" class="heading-group">
                   <h2 class="title-main">You're All Set!</h2>
                   <p class="subtitle-main">
@@ -378,11 +622,12 @@ onBeforeUnmount(() => {
                 </button>
               </div>
 
-              <!-- STEP 2: Phone Input -->
+              <!-- STEP 2: Phone Input (Clean & Simple) -->
               <form
                 v-else-if="currentStep === 'phone'"
                 key="step-phone"
                 class="phone-form"
+                novalidate
                 @submit.prevent="requestOtp"
               >
                 <div class="input-group">
@@ -427,6 +672,7 @@ onBeforeUnmount(() => {
                 v-else-if="currentStep === 'otp'"
                 key="step-otp"
                 class="otp-form"
+                novalidate
                 @submit.prevent="verifyOtp"
               >
                 <!-- Initial Enrollment QR Code (ONLY shown if unenrolled) -->
@@ -493,7 +739,299 @@ onBeforeUnmount(() => {
                 </button>
               </form>
 
-              <!-- STEP 4: Success State -->
+              <!-- STEP 4: Vendor Onboarding (ONLY for brand new vendor accounts) -->
+              <form
+                v-else-if="currentStep === 'vendor-onboarding'"
+                key="step-vendor-onboarding"
+                class="phone-form"
+                novalidate
+                @submit.prevent="proceedToStory"
+              >
+                <div class="vendor-setup-section">
+                  <div class="input-group">
+                    <label for="onboarding-chef-name" class="input-label">Chef / Your Name</label>
+                    <div class="custom-input-field" :class="{ 'has-field-error': formErrors.chefName }">
+                      <span class="material-symbols-outlined input-icon">person</span>
+                      <input
+                        id="onboarding-chef-name"
+                        v-model="chefName"
+                        type="text"
+                        placeholder="e.g. Priya Sharma"
+                        class="text-input"
+                        @input="formErrors.chefName = false; formErrors.kitchenName = false"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="input-group">
+                    <label for="onboarding-kitchen-name" class="input-label">Kitchen / Stall Name</label>
+                    <div class="custom-input-field" :class="{ 'has-field-error': formErrors.kitchenName }">
+                      <span class="material-symbols-outlined input-icon">soup_kitchen</span>
+                      <input
+                        id="onboarding-kitchen-name"
+                        v-model="kitchenName"
+                        type="text"
+                        placeholder="e.g. Priya's Homestyle Kitchen"
+                        class="text-input"
+                        @input="formErrors.kitchenName = false; formErrors.chefName = false"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="input-group">
+                    <div class="field-label-row">
+                      <label for="onboarding-specialties" class="input-label">Specialties / Cuisine</label>
+                      <span class="optional-tag">Optional</span>
+                    </div>
+                    <div class="custom-input-field">
+                      <span class="material-symbols-outlined input-icon">restaurant_menu</span>
+                      <input
+                        id="onboarding-specialties"
+                        v-model="specialties"
+                        type="text"
+                        placeholder="e.g. North Indian, Parathas, Healthy Thali"
+                        class="text-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="input-group">
+                    <label for="onboarding-pickup-address" class="input-label">Kitchen Pickup Location</label>
+                    <div
+                      class="custom-input-field clickable-input-field"
+                      :class="{ 'has-field-error': formErrors.pickupAddress }"
+                      @click="openMapModal"
+                    >
+                      <span class="material-symbols-outlined input-icon">location_on</span>
+                      <input
+                        id="onboarding-pickup-address"
+                        v-model="pickupAddress"
+                        type="text"
+                        placeholder="Tap to set location..."
+                        class="text-input cursor-pointer"
+                        readonly
+                        @click="openMapModal"
+                      />
+                      <button type="button" class="map-open-pill" @click.stop="openMapModal">
+                        <span class="material-symbols-outlined text-[15px]">map</span>
+                        <span>Pin</span>
+                      </button>
+                    </div>
+                    <p class="field-hint-text">
+                      Tap above to drop your exact kitchen pin on the map or use live GPS.
+                    </p>
+                  </div>
+                </div>
+
+                <span v-if="onboardingError" class="error-msg">{{ onboardingError }}</span>
+
+                <button
+                  type="submit"
+                  class="submit-btn"
+                  :disabled="isSubmitting"
+                >
+                  <span>Continue→</span>
+                </button>
+              </form>
+
+              <!-- STEP 5: Story & Experience (Optional, separate step) -->
+              <form
+                v-else-if="currentStep === 'vendor-story'"
+                key="step-vendor-story"
+                class="phone-form"
+                novalidate
+                @submit.prevent="proceedToPhotos(false)"
+              >
+                <div class="vendor-setup-section">
+                  <div class="input-group">
+                    <div class="field-label-row">
+                      <label for="onboarding-experience" class="input-label">Cooking Experience & Trust</label>
+                      <span class="optional-tag">Optional</span>
+                    </div>
+                    <div class="custom-input-field">
+                      <span class="material-symbols-outlined input-icon">military_tech</span>
+                      <input
+                        id="onboarding-experience"
+                        v-model="experience"
+                        type="text"
+                        placeholder="e.g. 5+ years home cooking, family secret recipes..."
+                        class="text-input"
+                      />
+                    </div>
+                    <p class="field-hint-text">
+                      Highlight your background, culinary tradition, or years of cooking experience.
+                    </p>
+                  </div>
+
+                  <div class="input-group">
+                    <div class="field-label-row">
+                      <label for="onboarding-bio" class="input-label">About the Chef / Story</label>
+                      <span class="optional-tag">Optional</span>
+                    </div>
+                    <div class="custom-textarea-field">
+                      <textarea
+                        id="onboarding-bio"
+                        v-model="bio"
+                        rows="4"
+                        placeholder="Share your culinary journey, what makes your home-cooked meals special, or your kitchen standards..."
+                        class="story-textarea"
+                      ></textarea>
+                    </div>
+                    <p class="field-hint-text">
+                      A warm personal bio helps neighbors connect with and trust your home kitchen.
+                    </p>
+                  </div>
+                </div>
+
+                <span v-if="onboardingError" class="error-msg">{{ onboardingError }}</span>
+
+                <div class="single-action-wrap">
+                  <button
+                    :type="hasStoryContent ? 'submit' : 'button'"
+                    class="dynamic-action-btn"
+                    :class="{ 'is-active': hasStoryContent }"
+                    @click="hasStoryContent ? null : proceedToPhotos(true)"
+                  >
+                    <Transition name="btn-fade" mode="out-in">
+                      <span :key="hasStoryContent ? 'continue' : 'skip'">
+                        {{ hasStoryContent ? 'Continue →' : 'Skip for now' }}
+                      </span>
+                    </Transition>
+                  </button>
+                </div>
+              </form>
+
+              <!-- STEP 6: Kitchen Photos & Branding (Optional) -->
+              <div
+                v-else-if="currentStep === 'vendor-photos'"
+                key="step-vendor-photos"
+                class="phone-form"
+              >
+                <div class="vendor-photos-section">
+                  <!-- Cover Photo Upload Section -->
+                  <div class="photo-upload-group">
+                    <div class="photo-upload-header">
+                      <label class="input-label photo-header-label">Kitchen Cover Banner</label>
+                      <span class="optional-tag">Optional</span>
+                    </div>
+                    
+                    <div 
+                      class="cover-banner-preview"
+                      :class="{ 'has-cover': Boolean(coverImage) }"
+                      @click="coverFileInput?.click()"
+                    >
+                      <img
+                        v-if="coverImage"
+                        :src="coverImage"
+                        alt="Cover banner preview"
+                        class="cover-banner-img"
+                      />
+                      <div v-else class="cover-banner-placeholder">
+                        <span class="material-symbols-outlined text-3xl text-primary/80">add_photo_alternate</span>
+                        <span class="text-xs font-bold text-on-surface mt-1">Upload Cover Banner</span>
+                        <span class="text-[11px] text-on-surface-variant">Recommended: Landscape photo of your kitchen</span>
+                      </div>
+
+                      <button 
+                        v-if="coverImage" 
+                        type="button" 
+                        class="photo-remove-btn"
+                        title="Remove Cover Photo"
+                        @click.stop="removeCover"
+                      >
+                        <span class="material-symbols-outlined text-[15px]">close</span>
+                      </button>
+                    </div>
+                    <input
+                      ref="coverFileInput"
+                      type="file"
+                      accept="image/*"
+                      class="hidden-file-input"
+                      @change="handleCoverFileChange"
+                    />
+                  </div>
+
+                  <!-- Profile Picture (PFP) Upload Section -->
+                  <div class="photo-upload-group">
+                    <div class="photo-upload-header">
+                      <label class="input-label photo-header-label">Chef Profile Picture</label>
+                      <span class="optional-tag">Optional</span>
+                    </div>
+
+                    <div class="avatar-upload-row">
+                      <div 
+                        class="avatar-circle-preview"
+                        :class="{ 'has-avatar': Boolean(avatarImage) }"
+                        @click="avatarFileInput?.click()"
+                      >
+                        <img
+                          v-if="avatarImage"
+                          :src="avatarImage"
+                          alt="Profile photo preview"
+                          class="avatar-circle-img"
+                        />
+                        <div v-else class="avatar-circle-placeholder">
+                          <span class="text-xl font-bold text-primary">
+                            {{ (chefName || kitchenName || 'K').charAt(0).toUpperCase() }}
+                          </span>
+                        </div>
+
+                        <button 
+                          v-if="avatarImage" 
+                          type="button" 
+                          class="avatar-remove-btn"
+                          title="Remove Profile Picture"
+                          @click.stop="removeAvatar"
+                        >
+                          <span class="material-symbols-outlined text-[13px]">close</span>
+                        </button>
+                      </div>
+
+                      <div class="avatar-upload-action">
+                        <button
+                          type="button"
+                          class="upload-trigger-btn"
+                          @click="avatarFileInput?.click()"
+                        >
+                          <span class="material-symbols-outlined text-[16px]">cloud_upload</span>
+                          <span>{{ avatarImage ? 'Change Photo' : 'Upload Photo' }}</span>
+                        </button>
+                        <span class="text-[11px] text-on-surface-variant">Square headshot or chef photo</span>
+                      </div>
+                    </div>
+                    <input
+                      ref="avatarFileInput"
+                      type="file"
+                      accept="image/*"
+                      class="hidden-file-input"
+                      @change="handleAvatarFileChange"
+                    />
+                  </div>
+                </div>
+
+                <span v-if="onboardingError" class="error-msg">{{ onboardingError }}</span>
+
+                <div class="single-action-wrap">
+                  <button
+                    type="button"
+                    class="dynamic-action-btn"
+                    :class="{ 'is-active': hasPhotoContent }"
+                    :disabled="isSubmitting"
+                    @click="finalizeVendorSetup({ skipPhotos: !hasPhotoContent })"
+                  >
+                    <span v-if="isSubmitting" class="loading-state">
+                      <span class="spinner"></span>
+                      Saving...
+                    </span>
+                    <Transition v-else name="btn-fade" mode="out-in">
+                      <span :key="hasPhotoContent ? 'launch' : 'skip'">
+                        {{ hasPhotoContent ? 'Complete & Launch 🚀' : 'Skip for now' }}
+                      </span>
+                    </Transition>
+                  </button>
+                </div>
+              </div>
+              <!-- STEP 5: Success State -->
               <div v-else-if="currentStep === 'success'" key="step-success" class="success-state">
                 <div class="success-icon-wrap">
                   <span class="material-symbols-outlined success-icon">task_alt</span>
@@ -519,6 +1057,42 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </main>
+
+    <!-- Interactive Location Picker Modal Canvas -->
+    <LocationPickerModal
+      :is-open="isMapModalOpen"
+      :initial-coordinates="coordinates"
+      :initial-address="pickupAddress"
+      @confirm="handleLocationConfirmed"
+      @close="isMapModalOpen = false"
+    />
+
+    <!-- Custom In-App Toast Notification (Replaces native browser HTML5 popups) -->
+    <Teleport to="body">
+      <Transition name="toast-slide">
+        <div
+          v-if="toast.show"
+          class="foodmap-toast-banner"
+          :class="`toast-${toast.type}`"
+          role="alert"
+        >
+          <div class="toast-card">
+            <div class="toast-icon-wrap">
+              <span class="material-symbols-outlined text-[20px]">
+                {{ toast.type === 'error' ? 'error' : toast.type === 'success' ? 'check_circle' : 'warning' }}
+              </span>
+            </div>
+            <div class="toast-content">
+              <span class="toast-title">{{ toast.type === 'warning' ? 'Required Details' : toast.type === 'error' ? 'Attention' : 'Notice' }}</span>
+              <span class="toast-message">{{ toast.message }}</span>
+            </div>
+            <button type="button" class="toast-close-btn" @click="toast.show = false" aria-label="Dismiss toast">
+              <span class="material-symbols-outlined text-[16px]">close</span>
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -614,7 +1188,9 @@ onBeforeUnmount(() => {
 @media (min-width: 1024px) {
   .card-shell {
     flex-direction: row;
-    min-height: 680px;
+    height: 700px;
+    min-height: 700px;
+    max-height: 700px;
   }
 }
 
@@ -626,6 +1202,7 @@ onBeforeUnmount(() => {
   position: relative;
   overflow: hidden;
   background-color: var(--color-surface-container);
+  height: 100%;
 }
 
 @media (min-width: 1024px) {
@@ -633,6 +1210,9 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
     width: 58%;
+    height: 100%;
+    min-height: 100%;
+    max-height: 100%;
   }
 }
 
@@ -648,12 +1228,7 @@ onBeforeUnmount(() => {
   background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCc2q59U-BoLMDHm9xJ1Vdyh9fhX8sff1HyNNhh7OS-wJ1MLTa2ppY94MdUREiKA9cYXj88IbAQbutm2T5Yq2b4bLJUENaYmKDbOWkabAshFkVHLOHU-M9HtMoBUjYTLAWMxArChP9rIZwiq2OZ9xvt1vi2z0eBS5rMYVK7VwPnerXJzkbRyvJPCbFqVQdPFhNLcn_QvXMfj9dRkjMcQeEzNU_hkOOrpi8nl9HA9bQPB6aFcSrja6Zv');
   background-size: cover;
   background-position: center;
-  transform: scale(1.03);
-  transition: transform 6s cubic-bezier(0.25, 1, 0.5, 1);
-}
-
-.visual-pane:hover .hero-image {
-  transform: scale(1.08);
+  transform: none !important;
 }
 
 .gradient-scrim-vertical {
@@ -853,25 +1428,32 @@ onBeforeUnmount(() => {
 @media (min-width: 1024px) {
   .form-pane {
     width: 42%;
-    padding: 3.5rem 3.5rem;
+    height: 100%;
+    padding: 2.25rem 3.25rem;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .form-pane::-webkit-scrollbar {
+    display: none;
   }
 }
 
 .form-container {
   width: 100%;
   max-width: 380px;
-  margin: 0 auto;
+  margin: auto auto;
   display: flex;
   flex-direction: column;
 }
 
 /* Brand Header */
 .brand-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 .logo-wrapper {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .brand-logo {
@@ -1147,6 +1729,177 @@ onBeforeUnmount(() => {
   background: #fff8f7;
 }
 
+.vendor-setup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.85rem;
+  background: var(--color-surface-container-lowest, #ffffff);
+  border: 1px solid var(--color-outline-variant, #dfbfb9);
+  border-radius: 1rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+}
+
+.address-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.detect-gps-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: rgba(169, 54, 32, 0.08);
+  border: 1px solid rgba(169, 54, 32, 0.25);
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.detect-gps-btn:hover:not(:disabled) {
+  background: rgba(169, 54, 32, 0.18);
+  transform: scale(1.02);
+}
+
+.detect-gps-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.custom-input-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--color-surface-container-low);
+  border: 1.5px solid var(--color-surface-container-highest);
+  border-radius: 0.875rem;
+  padding: 0.6rem 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.custom-input-field:focus-within {
+  border-color: var(--color-primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(169, 54, 32, 0.12);
+}
+
+.custom-input-field .text-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--color-on-surface);
+  outline: none;
+}
+
+.custom-input-field .text-input::placeholder {
+  color: var(--color-on-surface-variant);
+  opacity: 0.6;
+}
+
+.custom-input-field .input-icon {
+  font-size: 18px;
+  color: var(--color-primary);
+}
+
+.clickable-input-field {
+  cursor: pointer;
+  position: relative;
+}
+
+.clickable-input-field:hover {
+  border-color: var(--color-primary);
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
+.clickable-input-field .text-input {
+  min-width: 0;
+  font-size: 0.8125rem;
+  padding-right: 0.35rem;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.clickable-input-field .text-input::placeholder {
+  font-size: 0.775rem;
+  color: var(--color-on-surface-variant);
+  opacity: 0.65;
+}
+
+.map-open-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(169, 54, 32, 0.1);
+  color: var(--color-primary);
+  border: 1px solid rgba(169, 54, 32, 0.2);
+  border-radius: 9999px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.map-open-pill:hover {
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.field-hint-text {
+  font-size: 0.72rem;
+  color: var(--color-on-surface-variant);
+  margin-top: 0.15rem;
+  opacity: 0.8;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.custom-textarea-field {
+  display: flex;
+  background: var(--color-surface-container-low);
+  border: 1.5px solid var(--color-surface-container-highest);
+  border-radius: 0.875rem;
+  padding: 0.65rem 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.custom-textarea-field:focus-within {
+  border-color: var(--color-primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(169, 54, 32, 0.12);
+}
+
+.story-textarea {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--color-on-surface);
+  outline: none;
+  resize: none;
+  line-height: 1.5;
+}
+
+.story-textarea::placeholder {
+  color: var(--color-on-surface-variant);
+  opacity: 0.6;
+}
+
 .country-code {
   font-size: 0.9375rem;
   font-weight: 600;
@@ -1380,6 +2133,280 @@ onBeforeUnmount(() => {
 }
 
 /* ==========================================================================
+   Vendor Photos (PFP & Cover Banner) Setup
+   ========================================================================== */
+.vendor-photos-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.photo-upload-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.photo-upload-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.photo-header-label {
+  margin-bottom: 0 !important;
+}
+
+.optional-tag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-on-surface-variant);
+  background: var(--color-surface-container-high);
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.cover-banner-preview {
+  position: relative;
+  width: 100%;
+  height: 115px;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(242, 107, 80, 0.08) 0%, rgba(245, 158, 11, 0.12) 100%);
+  border: 1.5px dashed rgba(223, 191, 185, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cover-banner-preview:hover {
+  border-color: var(--color-primary);
+  background: linear-gradient(135deg, rgba(242, 107, 80, 0.14) 0%, rgba(245, 158, 11, 0.18) 100%);
+}
+
+.cover-banner-preview.has-cover {
+  border-style: solid;
+  border-color: rgba(223, 191, 185, 0.3);
+}
+
+.cover-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-banner-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.avatar-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.avatar-circle-preview {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(242, 107, 80, 0.08);
+  border: 2px dashed rgba(223, 191, 185, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.avatar-circle-preview:hover {
+  border-color: var(--color-primary);
+}
+
+.avatar-circle-preview.has-avatar {
+  border-style: solid;
+  border-color: var(--color-primary);
+}
+
+.avatar-circle-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-circle-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-remove-btn,
+.avatar-remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.photo-remove-btn:hover,
+.avatar-remove-btn:hover {
+  background: rgba(220, 38, 38, 0.9);
+  transform: scale(1.1);
+}
+
+.avatar-upload-action {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.upload-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(223, 191, 185, 0.5);
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: fit-content;
+}
+
+.upload-trigger-btn:hover {
+  background: rgba(242, 107, 80, 0.08);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.hidden-file-input {
+  display: none !important;
+}
+
+.photos-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.skip-btn {
+  padding: 0.875rem 1.15rem;
+  border-radius: 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+  background: var(--color-surface-container-low);
+  border: 1px solid rgba(223, 191, 185, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.skip-btn:hover {
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  border-color: rgba(223, 191, 185, 0.9);
+}
+
+.single-action-wrap {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
+.dynamic-action-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.95rem 1.25rem;
+  border-radius: 0.875rem;
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  /* Default inactive state: Sleek cool grey (Skip for now) */
+  background: var(--color-surface-container-low);
+  color: var(--color-on-surface-variant);
+  border: 1.5px solid rgba(223, 191, 185, 0.65);
+  box-shadow: none;
+  /* Ultra-smooth color, border, and glow transition */
+  transition: background-color 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              color 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.18s ease;
+}
+
+.dynamic-action-btn.is-active {
+  /* Active state: Vibrant primary terracotta red (Continue / Launch) */
+  background: var(--color-primary);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 8px 20px -3px rgba(169, 54, 32, 0.38);
+}
+
+.dynamic-action-btn.is-active:hover:not(:disabled) {
+  background: #952e1a;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -3px rgba(169, 54, 32, 0.48);
+}
+
+.dynamic-action-btn:not(.is-active):hover:not(:disabled) {
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  border-color: rgba(223, 191, 185, 0.95);
+  transform: translateY(-1px);
+}
+
+.dynamic-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Button text crossfade transition */
+.btn-fade-enter-active,
+.btn-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-fade-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.btn-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* ==========================================================================
    Footer & Legal Notice
    ========================================================================== */
 .footer-terms {
@@ -1433,5 +2460,135 @@ onBeforeUnmount(() => {
 .slide-fade-leave-to {
   transform: translateY(-8px);
   opacity: 0;
+}
+
+/* ==========================================================================
+   Custom In-App Toast Notification
+   ========================================================================== */
+.foodmap-toast-banner {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999999;
+  pointer-events: auto;
+  max-width: 90vw;
+  width: fit-content;
+}
+
+.toast-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  background: rgba(30, 24, 22, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #ffffff;
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  min-width: 290px;
+}
+
+.toast-warning .toast-card {
+  border-left: 4px solid #f59e0b;
+}
+
+.toast-warning .toast-icon-wrap {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.18);
+}
+
+.toast-error .toast-card {
+  border-left: 4px solid #ef4444;
+}
+
+.toast-error .toast-icon-wrap {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.toast-icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.toast-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+}
+
+.toast-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.toast-message {
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #ffffff;
+}
+
+.toast-close-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.toast-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Toast Transitions */
+.toast-slide-enter-active {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-slide-leave-active {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-slide-enter-from {
+  opacity: 0;
+  transform: translate(-50%, -24px) scale(0.95);
+}
+
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -16px) scale(0.95);
+}
+
+.has-field-error {
+  border-color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.04) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+  animation: shake 0.35s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
 }
 </style>

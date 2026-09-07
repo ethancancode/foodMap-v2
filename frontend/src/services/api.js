@@ -11,8 +11,8 @@ const api = axios.create({
 
 // Request interceptor: attach token
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('foodmap_token');
-  if (token) {
+  const token = localStorage.getItem('foodmap_token') || sessionStorage.getItem('foodmap_pending_token');
+  if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -64,6 +64,7 @@ export const authApi = {
   verifyOtp: (payload) => api.post('/auth/verify-otp', payload).then((r) => r.data),
   getCurrentUser: () => api.get('/auth/me').then((r) => r.data),
   updateProfile: (data) => api.put('/auth/profile', data).then((r) => r.data),
+  completeOnboarding: (data) => api.post('/auth/complete-onboarding', data).then((r) => r.data),
 };
 
 export const locationApi = {

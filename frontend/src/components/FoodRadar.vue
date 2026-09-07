@@ -9,7 +9,13 @@ import {
   onVendorUpdated
 } from '../services/socket.js'
 import LeafletRadar from './LeafletRadar.vue'
+import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
 
+// Re-evaluates every second as currentTimestamp ticks
+const countdown = computed(() => {
+  void currentTimestamp.value
+  return (item) => getCookingCountdown(item)
+})
 
 const props = defineProps({
   user: Object,
@@ -264,7 +270,7 @@ onMounted(async () => {
     const idx = foods.value.findIndex((f) => f._id === data.foodId || f.id === data.foodId)
     if (idx !== -1) {
       foods.value[idx].quantity = data.quantity
-      foods.value[idx].isAvailable = data.isAvailable
+      foods.value[idx].isAvailable = data.isAvailable !== undefined ? data.isAvailable : ((data.available !== false) && (data.quantity > 0))
       foods.value[idx].status = data.status
       if (data.price) foods.value[idx].price = data.price
     }
@@ -732,9 +738,12 @@ function toggleRole() {
 
                     <!-- Micro-bar attributes -->
                     <div class="mt-auto pt-2 flex items-center justify-between border-t border-outline-variant/10 text-xs">
-                      <span class="inline-flex items-center gap-1 text-green-700 font-bold bg-green-50 px-2 py-0.5 rounded-md">
-                        <span class="material-symbols-outlined text-[14px]">schedule</span>
-                        {{ item.cookingStatus || 'Ready now' }}
+                      <span
+                        :class="countdown(item).isReady ? 'text-green-700 bg-green-50' : 'text-amber-800 bg-amber-50 font-mono'"
+                        class="inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-md"
+                      >
+                        <span class="material-symbols-outlined text-[14px]" :class="countdown(item).isReady ? '' : 'animate-pulse text-amber-600'">schedule</span>
+                        {{ countdown(item).text }}
                       </span>
 
                       <span class="inline-flex items-center gap-1 text-on-surface-variant font-semibold">

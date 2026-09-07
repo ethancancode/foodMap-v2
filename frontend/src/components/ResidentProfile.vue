@@ -125,28 +125,33 @@ function handleLogout() {
           
           <!-- Profile Header Section -->
           <section class="flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-stack-lg w-full bg-surface-container-lowest p-4 sm:p-6 rounded-2xl border border-outline-variant/20 shadow-sm">
-            <div class="w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden shadow-md ring-4 ring-surface flex-shrink-0 relative">
+            <div class="w-20 h-20 sm:w-28 sm:h-28 rounded-full overflow-hidden shadow-md ring-4 ring-surface flex-shrink-0 relative flex items-center justify-center bg-primary/20">
               <img
+                v-if="props.user?.avatar"
                 alt="Profile photo"
                 class="w-full h-full object-cover"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-X2N_MBx3jeZoXjVwqr2YHzWOXb-McFnW5_Tul40mZAa9NuirSD7OKBkkDU56xzennrxI3Xgv-sO-QsSTQzj2Bgea6r41SOJqbrH8gWm8zMup3uMuMaG28Z-fGLLlliOALyrH-YnA9TWnRinucPUDxqCgeWLoi3BEPWE8u7Fh4xXAmbxwgcOfwpER6x1vM3SR1jywAKX3fBJaC48BfJ_cwOyEuMuIbtahE2gMi3BEM_m8HL3TAKHU"
+                :src="props.user.avatar"
+                @error="$event.target.style.display = 'none'"
               />
+              <span v-else class="text-3xl sm:text-4xl font-bold text-primary">
+                {{ (props.user?.name || 'U').charAt(0).toUpperCase() }}
+              </span>
             </div>
             <div class="flex flex-col items-center sm:items-start text-center sm:text-left flex-grow gap-1">
               <div class="flex items-center gap-2 text-primary font-label-sm text-xs font-bold uppercase tracking-wider">
                 <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
                 FoodMap Verified Resident
               </div>
-              <h2 class="font-display-lg text-lg sm:text-title-md font-bold text-on-surface">{{ props.user?.name || 'Nikhil' }}</h2>
+              <h2 class="font-display-lg text-lg sm:text-title-md font-bold text-on-surface">{{ props.user?.name || 'Resident' }}</h2>
               <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-3 text-xs text-on-surface-variant mt-1">
-                <span class="flex items-center gap-1">
+                <span v-if="props.user?.phone" class="flex items-center gap-1">
                   <span class="material-symbols-outlined text-[16px]">call</span>
-                  +91 98201 45892
+                  {{ props.user.phone }}
                 </span>
-                <span class="hidden sm:inline">•</span>
-                <span class="flex items-center gap-1">
+                <span v-if="props.user?.phone && props.user?.location?.address" class="hidden sm:inline">•</span>
+                <span v-if="props.user?.location?.address" class="flex items-center gap-1">
                   <span class="material-symbols-outlined text-[16px]">location_on</span>
-                  Bhandup West, Mumbai
+                  {{ props.user.location.address }}
                 </span>
               </div>
             </div>
@@ -191,7 +196,7 @@ function handleLogout() {
                     <h4 class="font-title-md font-bold text-on-surface text-xs sm:text-sm">Authentic Rajma Chawal</h4>
                     <span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">Ready</span>
                   </div>
-                  <p class="text-[11px] sm:text-xs text-on-surface-variant mt-0.5">Anjali's Kitchen • 2 portions • ₹195</p>
+                  <p class="text-[11px] sm:text-xs text-on-surface-variant mt-0.5">Priya Kitchen • 2 portions • ₹195</p>
                 </div>
                 <button
                   @click="navigateTo('order_status')"
@@ -230,9 +235,9 @@ function handleLogout() {
                 class="bg-surface-container-lowest rounded-xl p-3 sm:p-3.5 shadow-sm border border-outline-variant/20 flex items-center justify-between cursor-pointer hover:border-primary/40 transition-colors"
               >
                 <div class="flex items-center gap-3">
-                  <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs">AK</div>
+                  <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs">PK</div>
                   <div>
-                    <h4 class="font-label-md font-bold text-on-surface text-xs">Anjali's Kitchen</h4>
+                    <h4 class="font-label-md font-bold text-on-surface text-xs">Priya Kitchen</h4>
                     <span class="text-[10px] sm:text-[11px] text-on-surface-variant">North Indian Home Cook • 4.9 ★</span>
                   </div>
                 </div>

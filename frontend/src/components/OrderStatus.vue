@@ -13,6 +13,7 @@ const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
 // 'placed' (0), 'accepted' (1), 'preparing' (2), 'ready_for_pickup' (3), 'completed' (4)
 const statusMap = {
+  pending: 0,
   placed: 0,
   accepted: 1,
   preparing: 2,
@@ -22,18 +23,24 @@ const statusMap = {
 }
 
 const liveOrder = ref(props.order || {})
-const currentStatus = ref(props.order?.status || 'preparing')
+const currentStatus = ref(props.order?.status || 'pending')
 
 const stepIndex = computed(() => {
-  const s = currentStatus.value?.toLowerCase() || 'preparing'
-  return statusMap[s] !== undefined ? statusMap[s] : 2
+  const s = currentStatus.value?.toLowerCase() || 'pending'
+  return statusMap[s] !== undefined ? statusMap[s] : 0
 })
+
+function formatVendorName(val) {
+  if (!val) return 'Priya Kitchen'
+  if (typeof val === 'string') return val
+  return val.businessName || val.name || 'Priya Kitchen'
+}
 
 const orderInfo = computed(() => ({
   id: liveOrder.value?.orderNumber || liveOrder.value?.id || '#FM1024',
   _id: liveOrder.value?._id,
   item: liveOrder.value?.foodName || liveOrder.value?.item || 'Authentic Rajma Chawal',
-  vendor: liveOrder.value?.vendorName || liveOrder.value?.vendor || "Anjali's Kitchen",
+  vendor: formatVendorName(liveOrder.value?.vendorName || liveOrder.value?.vendor),
   qty: liveOrder.value?.quantity || liveOrder.value?.qty || 2,
   price: liveOrder.value?.totalAmount || liveOrder.value?.total || 195,
   status: currentStatus.value,

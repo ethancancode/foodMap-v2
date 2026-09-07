@@ -8,6 +8,6 @@ export async function updateAvailability(foodId, { quantity, available, status }
   return await FoodAvailability.findOneAndUpdate(
     { food: foodId },
     { quantity, available, status, lastUpdated: new Date() },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
 }

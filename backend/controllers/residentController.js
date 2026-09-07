@@ -23,7 +23,7 @@ export async function updatePreferences(req, res, next) {
     const resident = await Resident.findOneAndUpdate(
       { user: req.user._id },
       { preferences: req.body },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     );
     res.json({ success: true, resident });
   } catch (err) {
@@ -37,7 +37,7 @@ export async function vouchVendor(req, res, next) {
     const resident = await Resident.findOneAndUpdate(
       { user: req.user._id },
       { $addToSet: { vouchedVendors: vendorId } },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     );
     res.json({ success: true, resident });
   } catch (err) {

@@ -41,11 +41,49 @@ export const useAuthStore = defineStore('auth', {
         const res = await authApi.verifyOtp(payload);
         if (res.token) {
           this.token = res.token;
-          localStorage.setItem('foodmap_token', res.token);
           this.user = res.user;
           this.currentRole = res.user.role || 'resident';
+
+          const isNewVendor = Boolean(res.isNewUser) && res.user.role === 'vendor' && !res.user.isOnboarded;
+
+          if (isNewVendor) {
+            // Store pending token in sessionStorage so onboarding request is authorized,
+            // but DO NOT save to localStorage! If page is refreshed, session is completely discarded.
+            sessionStorage.setItem('foodmap_pending_token', res.token);
+            this.isAuthenticated = false;
+          } else {
+            // Returning vendor or resident: fully authenticated
+            sessionStorage.removeItem('foodmap_pending_token');
+            localStorage.setItem('foodmap_token', res.token);
+            this.isAuthenticated = true;
+            this.qrCode = null;
+            this.isEnrolled = true;
+            subscribeToUser(res.user._id || res.user.id);
+          }
+        }
+        return res;
+      } catch (err) {
+        const message =
+          err.response?.data?.message ||
+          (err.request ? 'Could not reach the server. Please check your connection and try again.' : 'Invalid verification code. Please try again.');
+        throw new Error(message);
+      }
+    },
+
+    async completeOnboarding(data) {
+      try {
+        const token = this.token || sessionStorage.getItem('foodmap_pending_token') || localStorage.getItem('foodmap_token');
+        const res = await authApi.completeOnboarding(
+          { ...data, token },
+          token ? { headers: { Authorization: `Bearer ${token}` } } : {}
+        );
+        if (res.token) {
+          sessionStorage.removeItem('foodmap_pending_token');
+          this.token = res.token;
+          localStorage.setItem('foodmap_token', res.token);
+          this.user = res.user;
+          this.currentRole = 'vendor';
           this.isAuthenticated = true;
-          this.qrCode = null;
           this.isEnrolled = true;
           subscribeToUser(res.user._id || res.user.id);
         }
@@ -53,7 +91,7 @@ export const useAuthStore = defineStore('auth', {
       } catch (err) {
         const message =
           err.response?.data?.message ||
-          (err.request ? 'Could not reach the server. Please check your connection and try again.' : 'Invalid verification code. Please try again.');
+          (err.request ? 'Could not reach the server. Please check your connection and try again.' : 'Could not complete onboarding. Please try again.');
         throw new Error(message);
       }
     },
@@ -76,6 +114,10 @@ export const useAuthStore = defineStore('auth', {
       try {
         const res = await authApi.getCurrentUser();
         if (res && res.user) {
+          if (res.user.role === 'vendor' && !res.user.isOnboarded) {
+            this.logout();
+            return null;
+          }
           this.user = res.user;
           this.currentRole = res.user.role || 'resident';
           this.isAuthenticated = true;

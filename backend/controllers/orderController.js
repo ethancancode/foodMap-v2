@@ -22,6 +22,7 @@ export async function createOrder(req, res, next) {
               foodId: updatedFood._id,
               quantity: updatedFood.quantity,
               available: updatedFood.available,
+              isAvailable: updatedFood.available !== false && updatedFood.quantity > 0,
               status: updatedFood.status,
             });
 

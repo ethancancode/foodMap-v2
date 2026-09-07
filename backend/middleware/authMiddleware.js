@@ -5,6 +5,8 @@ export async function protect(req, res, next) {
   let token;
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
+  } else if (req.body && req.body.token) {
+    token = req.body.token;
   }
 
   if (!token) {

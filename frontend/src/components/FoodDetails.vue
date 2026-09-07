@@ -2,6 +2,13 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onFoodAvailabilityUpdated } from '../services/socket.js'
 import { foodApi } from '../services/api.js'
+import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
+
+// Re-evaluates every second as currentTimestamp ticks
+const countdown = computed(() => {
+  void currentTimestamp.value
+  return (item) => getCookingCountdown(item)
+})
 
 const props = defineProps({
   food: Object,
@@ -23,7 +30,7 @@ const foodItem = computed(() => ({
   portions: currentPortions.value,
   time: props.food?.time || 'Ready Now',
   distance: props.food?.distance || '420m away',
-  vendorName: props.food?.vendorName || "Anjali's Kitchen",
+  vendorName: (typeof props.food?.vendorName === 'string' && props.food?.vendorName) ? props.food.vendorName : (typeof props.food?.vendor === 'string' ? props.food.vendor : (props.food?.vendor?.businessName || "Priya Kitchen")),
   vendorId: props.food?.vendorId,
   description: props.food?.desc || props.food?.description || 'Authentic homestyle delicacy freshly prepared with traditional spices.',
   image: props.food?.image || 'https://lh3.googleusercontent.com/aida-public/AB6AXuCcCn3i8k4gYk-jLV5MXuqSONW-8QpGOpQ4yYcs-5HUarOFUR1kCq3boeWmwl-f7Seo8MV5gGPaYolyo8w_lFVLtdBGN11e9huwwnLqF4wUGtqAbHcuebFi79m5evx_bXkagJMfR6xqZSl0A3UhdKsMtGL_SyAxPz6EhwbTtY7oWANHjY08Msx9WdC5GF0cpXi4h-eS9GA4sfMmh7CCZv7Lu_elTf3lY2oNae4dUF5Fxdr0ktu3Ed5C'
@@ -48,8 +55,8 @@ onMounted(async () => {
   unsubAvailability = onFoodAvailabilityUpdated((data) => {
     const targetId = props.food?.id || props.food?._id
     if (data.foodId === targetId || String(data.foodId) === String(targetId)) {
-      currentPortions.value = data.quantity
-      isAvailable.value = data.isAvailable && data.quantity > 0
+      const avail = data.isAvailable !== undefined ? data.isAvailable : (data.available !== false)
+      isAvailable.value = avail && data.quantity > 0
       liveFlash.value = true
       setTimeout(() => {
         liveFlash.value = false
@@ -169,8 +176,10 @@ function reservePortion() {
               <!-- Top Badges -->
               <div class="absolute top-4 left-4 flex flex-wrap gap-2">
                 <div class="bg-surface/95 backdrop-blur-md px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-outline-variant/20">
-                  <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                  <span class="font-label-md text-on-surface text-xs font-bold">{{ foodItem.time }}</span>
+                  <span class="w-2 h-2 rounded-full" :class="countdown(foodItem).isReady ? 'bg-green-500 animate-pulse' : 'bg-amber-500 animate-ping'"></span>
+                  <span class="font-label-md text-xs font-bold font-mono" :class="countdown(foodItem).isReady ? 'text-green-700' : 'text-amber-800'">
+                    {{ countdown(foodItem).text }}
+                  </span>
                 </div>
               </div>
 

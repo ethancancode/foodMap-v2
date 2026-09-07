@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "node backend/server.js",
-    "build": "vite build",
-    "lint": "vite build",
+    "clean-accounts": "node backend/scripts/clearAccounts.js",
+    "cleanup-root": "node backend/scripts/cleanupLegacyRoot.js",
+    "build": "vite build frontend",
+    "lint": "vite build frontend",
     "start": "node backend/server.js",
     "preview": "node backend/server.js"
   },

@@ -9,10 +9,16 @@ const props = defineProps({
 
 const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
+function formatVendorName(val) {
+  if (!val) return 'Priya Kitchen'
+  if (typeof val === 'string') return val
+  return val.businessName || val.name || 'Priya Kitchen'
+}
+
 const orderData = computed(() => ({
   id: props.order?.id || '#FM1024',
   item: props.order?.item || 'Rajma Chawal',
-  vendor: props.order?.vendor || "Anjali's Kitchen",
+  vendor: formatVendorName(props.order?.vendorName || props.order?.vendor),
   qty: props.order?.qty || 2,
   total: props.order?.total || 195,
   fulfillment: props.order?.fulfillment || 'pickup'
@@ -104,8 +110,8 @@ function navigateTo(route, payload = null) {
           </div>
 
           <!-- Header -->
-          <h1 class="font-display-lg text-display-lg text-on-surface mb-stack-sm font-bold">Order Confirmed!</h1>
-          <p class="font-body-lg text-on-surface-variant mb-stack-lg">Your meal from {{ orderData.vendor }} is locked in.</p>
+          <h1 class="font-display-lg text-display-lg text-on-surface mb-stack-sm font-bold">Order Placed!</h1>
+          <p class="font-body-lg text-on-surface-variant mb-stack-lg">Your request has been dispatched to {{ orderData.vendor }}.</p>
           
           <div class="bg-surface px-4 py-1.5 rounded-full text-on-surface font-label-md tracking-wider mb-stack-lg flex items-center gap-2 border border-outline-variant/30 font-bold text-sm">
             <span class="material-symbols-outlined text-[18px] text-primary">receipt_long</span>

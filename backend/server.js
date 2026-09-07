@@ -32,8 +32,8 @@ const io = initializeSocket(server);
 
 // Middleware
 app.use(cors({ origin: '*' }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Attach Socket.IO instance to req
 app.use((req, res, next) => {
@@ -41,13 +41,23 @@ app.use((req, res, next) => {
   next();
 });
 
-// Clean up deprecated unused files
-[
-  path.join(rootDir, 'src', 'components', 'MapboxRadar.vue'),
-  path.join(rootDir, 'frontend', 'src', 'components', 'MapboxRadar.vue'),
-].forEach((f) => {
-  try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (e) { }
-});
+// Clean up legacy root src folder and config now that all frontend code lives in frontend/
+try {
+  const legacySrc = path.join(rootDir, 'src');
+  if (fs.existsSync(legacySrc)) fs.rmSync(legacySrc, { recursive: true, force: true });
+  const legacyIndex = path.join(rootDir, 'index.html');
+  if (fs.existsSync(legacyIndex)) fs.unlinkSync(legacyIndex);
+  const legacyVite = path.join(rootDir, 'vite.config.js');
+  if (fs.existsSync(legacyVite)) fs.unlinkSync(legacyVite);
+  const legacyPublic = path.join(rootDir, 'public');
+  if (fs.existsSync(legacyPublic)) fs.rmSync(legacyPublic, { recursive: true, force: true });
+  const legacyBun = path.join(rootDir, 'bun.lock');
+  if (fs.existsSync(legacyBun)) fs.unlinkSync(legacyBun);
+  const deprecatedMapbox = path.join(rootDir, 'frontend', 'src', 'components', 'MapboxRadar.vue');
+  if (fs.existsSync(deprecatedMapbox)) fs.unlinkSync(deprecatedMapbox);
+} catch (e) {
+  // Ignore permission or file lock errors
+}
 
 // Connect to MongoDB Atlas and seed
 connectDB().then(() => {
@@ -77,9 +87,7 @@ app.get('/api/health', (req, res) => {
 const isProduction = process.env.NODE_ENV === 'production';
 
 async function setupFrontend() {
-  const frontendDir = fs.existsSync(path.join(rootDir, 'frontend'))
-    ? path.join(rootDir, 'frontend')
-    : rootDir;
+  const frontendDir = path.join(rootDir, 'frontend');
 
   if (!isProduction) {
     try {

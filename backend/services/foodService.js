@@ -17,6 +17,9 @@ export async function getAllFoods(filters = {}) {
   if (filters.search) {
     query.name = { $regex: filters.search, $options: 'i' };
   }
+  if (filters.vendor && mongoose.Types.ObjectId.isValid(filters.vendor)) {
+    query.vendor = filters.vendor;
+  }
 
   const foods = await Food.find(query)
     .populate('vendor', 'businessName category rating totalReviews status location pickupAddress coverImage')
@@ -38,7 +41,7 @@ export async function createFood(vendorUserId, data) {
   if (!vendor) {
     vendor = await Vendor.create({
       user: vendorUserId,
-      businessName: data.vendorName || "Anjali's Kitchen",
+      businessName: data.vendorName || 'Priya Kitchen',
       location: data.vendorLocation || {
         type: 'Point',
         coordinates: [72.9348, 19.1462],
@@ -47,12 +50,31 @@ export async function createFood(vendorUserId, data) {
     });
   }
 
+function calculateReadyAt(statusText, explicitReadyAt) {
+  if (explicitReadyAt) return new Date(explicitReadyAt);
+  if (!statusText) return null;
+  const raw = String(statusText).trim();
+  if (/^(ready\s*now|now)$/i.test(raw)) return null;
+
+  const hrMatch = raw.match(/(\d+)\s*(?:hr|hour|h)/i);
+  const minMatch = raw.match(/(\d+)\s*(?:min|m)/i);
+  const totalMinutes = (hrMatch ? parseInt(hrMatch[1], 10) * 60 : 0) + (minMatch ? parseInt(minMatch[1], 10) : 0);
+  if (totalMinutes > 0) {
+    return new Date(Date.now() + totalMinutes * 60 * 1000);
+  }
+  return null;
+}
+
   const quantity = Number(data.quantity) || 1;
   const initialQuantity = Number(data.initialQuantity) || quantity;
   const location = data.vendorLocation || vendor.location || {
     type: 'Point',
     coordinates: [72.9348, 19.1462],
   };
+  const pickupAddress = data.vendorLocation?.pickupAddress || data.pickupAddress || vendor.location?.pickupAddress || 'Navi Mumbai, Thane';
+
+  const cookingStatus = data.cookingStatus || data.timeReady || 'Ready now';
+  const readyAt = calculateReadyAt(cookingStatus, data.readyAt);
 
   const food = await Food.create({
     name: data.name,
@@ -63,11 +85,13 @@ export async function createFood(vendorUserId, data) {
     isVeg: data.isVeg !== undefined ? data.isVeg : true,
     diet: data.diet || (data.isVeg !== false ? 'veg' : 'non-veg'),
     category: data.category || 'Main Course',
-    timeReady: data.timeReady || data.cookingStatus || 'Ready Now',
-    cookingStatus: data.cookingStatus || data.timeReady || 'Ready now',
+    timeReady: data.timeReady || cookingStatus,
+    cookingStatus,
+    readyAt,
     image: data.image || 'https://lh3.googleusercontent.com/aida-public/AB6AXuCcCn3i8k4gYk-jLV5MXuqSONW-8QpGOpQ4yYcs-5HUarOFUR1kCq3boeWmwl-f7Seo8MV5gGPaYolyo8w_lFVLtdBGN11e9huwwnLqF4wUGtqAbHcuebFi79m5evx_bXkagJMfR6xqZSl0A3UhdKsMtGL_SyAxPz6EhwbTtY7oWANHjY08Msx9WdC5GF0cpXi4h-eS9GA4sfMmh7CCZv7Lu_elTf3lY2oNae4dUF5Fxdr0ktu3Ed5C',
     spiciness: data.spiciness || 'Medium',
     location,
+    pickupAddress,
     vendor: vendor._id,
     status: quantity > 0 ? 'AVAILABLE' : 'SOLD_OUT',
     available: quantity > 0,
@@ -104,7 +128,14 @@ export async function updateFood(foodId, data) {
     }
   }
 
-  const food = await Food.findByIdAndUpdate(foodId, updatePayload, { new: true }).populate('vendor');
+  if (updatePayload.cookingStatus || updatePayload.timeReady || updatePayload.readyAt !== undefined) {
+    updatePayload.readyAt = calculateReadyAt(
+      updatePayload.cookingStatus || updatePayload.timeReady,
+      updatePayload.readyAt
+    );
+  }
+
+  const food = await Food.findByIdAndUpdate(foodId, updatePayload, { returnDocument: 'after' }).populate('vendor');
   
   if (food) {
     await FoodAvailability.findOneAndUpdate(
@@ -147,7 +178,7 @@ export async function deductFoodQuantity(foodId, qty) {
     {
       $inc: { quantity: -qty },
     },
-    { new: true }
+    { returnDocument: 'after' }
   ).populate('vendor');
 
   if (!food) {

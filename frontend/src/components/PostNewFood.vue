@@ -1,6 +1,7 @@
 <script setup>
-import { ref } from 'vue'
-import { foodApi } from '../services/api.js'
+import { ref, computed, onMounted } from 'vue'
+import { foodApi, vendorApi } from '../services/api.js'
+import LocationPickerModal from './LocationPickerModal.vue'
 
 const props = defineProps({
   user: Object,
@@ -9,43 +10,236 @@ const props = defineProps({
 
 const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
-// Reactive Form State
-const itemName = ref('Authentic Punjabi Rajma Chawal')
-const itemPrice = ref(120)
-const itemQty = ref(8)
-const readyTime = ref('Now')
-const itemCategory = ref('Main Course')
-const itemDesc = ref('Homestyle slow-cooked organic kidney beans with aromatic jeera rice and authentic spices.')
-const itemImage = ref('https://lh3.googleusercontent.com/aida-public/AB6AXuCF6NYjSXc9OspeP1pnTa_kDRcVFJ-6X_jzTTn2Nci-S0z_hZVs5kCYDgif_ukgkwzadu-7R6AutYiubrr4IPxt0FhAXzBXRCwb1euPR188gbVknZXweaixA_2UX5B_uYvk0CxgqJZlSpUtFG5WP5VvBj7uIfUZjPZYmV8o-BXbdqZYya_1ssmnACluTiKD01J13jhxmYCqaM_n8cOKDiC9ga1u0nFKyZjvf7bta75t0orS-GYTzk7U')
-const isPosting = ref(false)
+const vendorProfile = ref(null)
 
-const readyTimeOptions = ['Now', '15 min', '30 min', '45 min']
+// Reactive Form State (empty by default for new dishes)
+const itemName = ref('')
+const itemPrice = ref('')
+const itemQty = ref(6)
+const readyTime = ref('Now')
+const customHours = ref('')
+const customMinutes = ref('')
+const itemCategory = ref('Main Course')
+const itemDesc = ref('')
+const itemImage = ref('')
+const isPosting = ref(false)
+const foodFileInput = ref(null)
+const isMapModalOpen = ref(false)
+
+const currentPickupAddress = computed(() => {
+  return (
+    vendorProfile.value?.location?.pickupAddress ||
+    props.user?.location?.pickupAddress ||
+    'Seawoods, Navi Mumbai'
+  )
+})
+
+const currentCoordinates = computed(() => {
+  return (
+    vendorProfile.value?.location?.coordinates ||
+    props.user?.location?.coordinates ||
+    [73.0188, 19.0225]
+  )
+})
+
+onMounted(async () => {
+  try {
+    const res = await vendorApi.getMyProfile().catch(() => null)
+    if (res?.vendor) {
+      vendorProfile.value = res.vendor
+    }
+  } catch (e) {}
+})
+
+const readyTimeOptions = ['Now', '15 min', '30 min', '45 min', 'Custom']
+
+function getEffectiveCookingStatus() {
+  if (readyTime.value === 'Now') return 'Ready now'
+  if (readyTime.value === '15 min') return 'Ready in 15 mins'
+  if (readyTime.value === '30 min') return 'Ready in 30 mins'
+  if (readyTime.value === '45 min') return 'Ready in 45 mins'
+  if (readyTime.value === 'Custom') {
+    const h = parseInt(customHours.value) || 0
+    const m = parseInt(customMinutes.value) || 0
+    if (h > 0 && m > 0) return `Ready in ${h} hr ${m} mins`
+    if (h > 0) return `Ready in ${h} hr`
+    if (m > 0) return `Ready in ${m} mins`
+    return 'Ready soon'
+  }
+  return readyTime.value
+}
 
 function navigateTo(route, payload = null) {
   emit('navigate', route, payload)
 }
 
+function handleFoodFileChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) {
+    emit('action', { action: 'toast', payload: { message: 'Dish photo should be under 5MB' } })
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = (event) => {
+    itemImage.value = event.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+function removeDishPhoto() {
+  itemImage.value = ''
+  if (foodFileInput.value) foodFileInput.value.value = ''
+}
+
+function handleLocationConfirmed(loc) {
+  if (!vendorProfile.value) {
+    vendorProfile.value = {}
+  }
+  if (!vendorProfile.value.location) {
+    vendorProfile.value.location = { type: 'Point' }
+  }
+  vendorProfile.value.location.coordinates = loc.coordinates
+  vendorProfile.value.location.pickupAddress = loc.address
+  isMapModalOpen.value = false
+  emit('action', { action: 'toast', payload: { message: 'Pickup location updated' } })
+}
+
+// Custom Validation State (Replaces native browser HTML alerts)
+const errors = ref({
+  name: '',
+  price: '',
+  quantity: '',
+  customTime: ''
+})
+const hasAttemptedSubmit = ref(false)
+
+const hasFormErrors = computed(() => {
+  return Object.values(errors.value).some((msg) => Boolean(msg))
+})
+
+const firstErrorMessage = computed(() => {
+  return errors.value.name || errors.value.price || errors.value.quantity || errors.value.customTime || ''
+})
+
+function validateForm() {
+  const newErrors = {
+    name: '',
+    price: '',
+    quantity: '',
+    customTime: ''
+  }
+  let isValid = true
+
+  // 1. Dish Name
+  const trimmedName = (itemName.value || '').trim()
+  if (!trimmedName) {
+    newErrors.name = 'Please enter what you are cooking.'
+    isValid = false
+  } else if (trimmedName.length < 3) {
+    newErrors.name = 'Dish name must be at least 3 characters.'
+    isValid = false
+  }
+
+  // 2. Price Per Portion
+  const priceVal = itemPrice.value
+  const priceNum = Number(priceVal)
+  if (priceVal === '' || priceVal === null || priceVal === undefined) {
+    newErrors.price = 'Please enter price per portion.'
+    isValid = false
+  } else if (isNaN(priceNum) || priceNum <= 0) {
+    newErrors.price = 'Price must be greater than ₹0.'
+    isValid = false
+  } else if (priceNum > 10000) {
+    newErrors.price = 'Price cannot exceed ₹10,000.'
+    isValid = false
+  }
+
+  // 3. Batch Portions
+  const qtyVal = itemQty.value
+  const qtyNum = Number(qtyVal)
+  if (qtyVal === '' || qtyVal === null || qtyVal === undefined) {
+    newErrors.quantity = 'Please enter available batch portions.'
+    isValid = false
+  } else if (isNaN(qtyNum) || qtyNum < 1) {
+    newErrors.quantity = 'Batch portions must be at least 1.'
+    isValid = false
+  } else if (!Number.isInteger(qtyNum)) {
+    newErrors.quantity = 'Portions must be a whole number.'
+    isValid = false
+  } else if (qtyNum > 500) {
+    newErrors.quantity = 'Portions cannot exceed 500 in one batch.'
+    isValid = false
+  }
+
+  // 4. Custom Time Check
+  if (readyTime.value === 'Custom') {
+    const h = parseInt(customHours.value) || 0
+    const m = parseInt(customMinutes.value) || 0
+    if (h === 0 && m === 0) {
+      newErrors.customTime = 'Please specify estimated hours or minutes for serving time.'
+      isValid = false
+    }
+  }
+
+  errors.value = newErrors
+  return isValid
+}
+
+function clearError(field) {
+  if (errors.value[field]) {
+    errors.value[field] = ''
+  }
+  if (hasAttemptedSubmit.value) {
+    validateForm()
+  }
+}
+
 async function handlePost() {
-  if (!itemName.value || !itemPrice.value || !itemQty.value) {
-    emit('action', { action: 'toast', payload: { message: 'Please fill in all required fields' } })
+  hasAttemptedSubmit.value = true
+  if (!validateForm()) {
+    emit('action', {
+      action: 'toast',
+      payload: { message: firstErrorMessage.value || 'Please fill in all required fields correctly' }
+    })
     return
   }
 
   isPosting.value = true
   try {
+    const coords = currentCoordinates.value
+    const address = currentPickupAddress.value
+
+    let readyAt = null
+    const effectiveStatus = getEffectiveCookingStatus()
+    if (readyTime.value === '15 min') readyAt = new Date(Date.now() + 15 * 60 * 1000)
+    else if (readyTime.value === '30 min') readyAt = new Date(Date.now() + 30 * 60 * 1000)
+    else if (readyTime.value === '45 min') readyAt = new Date(Date.now() + 45 * 60 * 1000)
+    else if (readyTime.value === 'Custom') {
+      const h = parseInt(customHours.value) || 0
+      const m = parseInt(customMinutes.value) || 0
+      const totalM = h * 60 + m
+      if (totalM > 0) readyAt = new Date(Date.now() + totalM * 60 * 1000)
+    }
+
     const payload = {
       name: itemName.value,
       description: itemDesc.value,
-      price: itemPrice.value,
-      quantity: itemQty.value,
-      initialQuantity: itemQty.value,
-      cookingStatus: readyTime.value === 'Now' ? 'Ready now' : `Ready in ${readyTime.value}`,
+      price: Number(itemPrice.value),
+      quantity: Number(itemQty.value),
+      initialQuantity: Number(itemQty.value),
+      available: true,
+      isAvailable: true,
+      cookingStatus: effectiveStatus,
+      timeReady: effectiveStatus,
+      readyAt: readyAt ? readyAt.toISOString() : null,
       category: itemCategory.value,
       image: itemImage.value,
-      vendorName: props.user?.name || "Anjali's Kitchen",
+      vendorName: vendorProfile.value?.businessName || props.user?.name || "My Kitchen",
       vendorLocation: {
         type: 'Point',
-        coordinates: [72.9348, 19.1462] // Bhandup West coordinates
+        coordinates: coords,
+        pickupAddress: address,
       }
     }
 
@@ -54,11 +248,23 @@ async function handlePost() {
 
     const createdFood = res?.food || res?.data || res
     if (createdFood && (createdFood._id || createdFood.id || createdFood.name)) {
+      createdFood.available = true
+      createdFood.isAvailable = true
       emit('action', {
         action: 'toast',
         payload: { message: `🎉 ${createdFood.name} is now live on the neighborhood radar!` }
       })
-      emit('navigate', 'you_are_live', { food: createdFood })
+      emit('navigate', 'you_are_live', {
+        food: {
+          ...createdFood,
+          pickupAddress: address,
+          vendorLocation: {
+            type: 'Point',
+            coordinates: coords,
+            pickupAddress: address,
+          }
+        }
+      })
     } else {
       throw new Error('Could not verify food creation')
     }
@@ -109,7 +315,7 @@ async function handlePost() {
           class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
         >
           <span class="material-symbols-outlined mr-gutter">notifications_active</span>
-          <span class="font-label-md">Live Orders</span>
+          <span class="font-label-md">Incoming Orders</span>
         </button>
         <button
           @click="navigateTo('vendor_profile')"
@@ -126,11 +332,10 @@ async function handlePost() {
           class="w-full flex items-center gap-gutter px-gutter py-stack-md rounded-xl bg-surface-container-lowest border border-outline-variant/20 hover:border-primary/40 transition-colors text-left cursor-pointer"
         >
           <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-            A
+            {{ (vendorProfile?.businessName || props.user?.vendor?.businessName || props.user?.name || 'P').charAt(0).toUpperCase() }}
           </div>
-          <div class="flex flex-col">
-            <span class="font-label-md text-on-surface leading-none text-xs font-bold">Anjali's Kitchen</span>
-            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider mt-0.5">Home Chef</span>
+          <div class="flex flex-col min-w-0">
+            <span class="font-label-md text-on-surface leading-normal text-xs font-bold truncate">{{ vendorProfile?.businessName || props.user?.vendor?.businessName || props.user?.name || "Priya Kitchen" }}</span>
           </div>
         </button>
 
@@ -139,7 +344,7 @@ async function handlePost() {
           class="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-on-surface-variant hover:text-on-surface hover:bg-surface-container text-xs font-medium transition-colors cursor-pointer"
         >
           <span class="material-symbols-outlined text-[16px]">logout</span>
-          <span>Switch Account</span>
+          <span>Sign Out</span>
         </button>
       </div>
     </aside>
@@ -168,34 +373,98 @@ async function handlePost() {
           
           <!-- Dish Photo Upload / Preview -->
           <div
-            @click="emit('action', { action: 'toast', payload: { message: 'Image loaded from kitchen library' } })"
-            class="relative w-full aspect-video md:aspect-[21/9] bg-surface-container rounded-2xl overflow-hidden mb-4 sm:mb-6 cursor-pointer group shadow-sm border border-outline-variant/20 hover:border-primary/40 transition-all"
+            @click="foodFileInput?.click()"
+            class="relative w-full aspect-video md:aspect-[21/9] bg-surface-container rounded-2xl overflow-hidden mb-4 sm:mb-6 cursor-pointer group shadow-sm border border-outline-variant/30 hover:border-primary/60 transition-all flex items-center justify-center"
           >
-            <div
-              class="absolute inset-0 bg-cover bg-center opacity-80 group-hover:opacity-95 transition-opacity"
-              :style="{ backgroundImage: `url('${itemImage}')` }"
-            ></div>
-            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent flex flex-col justify-end p-3.5 sm:p-4">
-              <span class="text-white font-bold text-sm">Dish Preview Image</span>
-              <span class="text-white/80 text-xs">High-resolution photo captured fresh from stove</span>
-            </div>
+            <!-- When image is uploaded -->
+            <template v-if="itemImage">
+              <img
+                :src="itemImage"
+                alt="Dish preview"
+                class="absolute inset-0 w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+              />
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex items-end justify-between p-3.5 sm:p-4 z-10">
+                <div class="flex flex-col">
+                  <span class="text-white font-bold text-sm">Dish Preview Image</span>
+                  <span class="text-white/80 text-xs">Tap to change photo</span>
+                </div>
+                <button
+                  type="button"
+                  @click.stop="removeDishPhoto"
+                  class="bg-black/60 hover:bg-black/80 text-white rounded-full p-1.5 backdrop-blur-md transition-colors flex items-center justify-center cursor-pointer"
+                  title="Remove photo"
+                >
+                  <span class="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            </template>
+
+            <!-- When no image is uploaded yet -->
+            <template v-else>
+              <div class="flex flex-col items-center justify-center text-center p-6 gap-2">
+                <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <span class="material-symbols-outlined text-2xl">add_a_photo</span>
+                </div>
+                <div>
+                  <span class="text-xs sm:text-sm font-bold text-on-surface block">Upload Dish Photo</span>
+                  <span class="text-[11px] text-on-surface-variant block mt-0.5">
+                    Tap to upload a photo fresh from the stove or gallery
+                  </span>
+                </div>
+                <span class="text-[11px] font-bold text-primary bg-primary/10 px-3 py-1 rounded-full mt-1">
+                  Choose Photo
+                </span>
+              </div>
+            </template>
+
+            <input
+              ref="foodFileInput"
+              type="file"
+              accept="image/*"
+              class="hidden"
+              @change="handleFoodFileChange"
+            />
           </div>
 
           <!-- Listing Form -->
-          <form @submit.prevent="handlePost" class="space-y-4 sm:space-y-5 flex-1 flex flex-col">
+          <form novalidate @submit.prevent="handlePost" class="space-y-4 sm:space-y-5 flex-1 flex flex-col">
+            <!-- Validation Summary Alert -->
+            <transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0 -translate-y-2" enter-to-class="opacity-100 translate-y-0">
+              <div
+                v-if="hasFormErrors && hasAttemptedSubmit"
+                class="p-3.5 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-2.5 text-red-800 text-xs shadow-sm"
+              >
+                <span class="material-symbols-outlined text-[18px] text-red-600 shrink-0 mt-0.5">error</span>
+                <div class="flex flex-col">
+                  <span class="font-bold">Please check the required fields:</span>
+                  <span class="text-[11px] text-red-700 mt-0.5">{{ firstErrorMessage }}</span>
+                </div>
+              </div>
+            </transition>
+
             <div class="space-y-3.5 sm:space-y-4">
               <div class="flex flex-col">
-                <label class="text-xs font-bold text-on-surface mb-1 uppercase tracking-wider" for="item-name">
-                  What are you cooking? *
-                </label>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="text-xs font-bold text-on-surface uppercase tracking-wider" for="item-name">
+                    What are you cooking? <span class="text-primary">*</span>
+                  </label>
+                  <span v-if="itemName" class="text-[11px] text-on-surface-variant font-medium">
+                    {{ itemName.length }} chars
+                  </span>
+                </div>
                 <input
                   v-model="itemName"
-                  required
-                  class="w-full bg-surface text-on-surface text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-primary rounded-xl p-3 sm:p-3.5 shadow-sm border border-outline-variant/30 font-bold"
+                  @input="clearError('name')"
+                  class="w-full bg-surface text-on-surface text-sm sm:text-base focus:outline-none rounded-xl p-3 sm:p-3.5 shadow-sm border font-bold transition-all"
+                  :class="errors.name ? 'border-red-500 focus:border-red-500 ring-2 ring-red-500/20' : 'border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20'"
                   id="item-name"
                   placeholder="e.g., Authentic Punjabi Rajma Chawal"
                   type="text"
                 />
+                <p v-if="errors.name" class="mt-1.5 text-xs text-red-600 flex items-center gap-1 font-semibold">
+                  <span class="material-symbols-outlined text-[15px] text-red-600">error</span>
+                  <span>{{ errors.name }}</span>
+                </p>
               </div>
 
               <div class="flex flex-col">
@@ -214,70 +483,131 @@ async function handlePost() {
               <div class="grid grid-cols-2 gap-3">
                 <div class="flex flex-col">
                   <label class="text-xs font-bold text-on-surface mb-1 uppercase tracking-wider" for="item-price">
-                    Price Per Portion (₹) *
+                    Price Per Portion (₹) <span class="text-primary">*</span>
                   </label>
                   <div class="relative">
-                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-on-surface-variant font-bold">₹</span>
+                    <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold" :class="errors.price ? 'text-red-500' : 'text-on-surface-variant'">₹</span>
                     <input
                       v-model.number="itemPrice"
-                      required
-                      min="10"
-                      class="w-full bg-surface text-on-surface text-sm pl-8 pr-3 py-2.5 sm:py-3 focus:outline-none focus:ring-2 focus:ring-primary rounded-xl shadow-sm border border-outline-variant/30 font-black"
+                      @input="clearError('price')"
+                      class="w-full bg-surface text-on-surface text-sm pl-8 pr-3 py-2.5 sm:py-3 focus:outline-none rounded-xl shadow-sm border font-black transition-all"
+                      :class="errors.price ? 'border-red-500 focus:border-red-500 ring-2 ring-red-500/20' : 'border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20'"
                       id="item-price"
                       type="number"
+                      placeholder="0"
                     />
                   </div>
+                  <p v-if="errors.price" class="mt-1.5 text-xs text-red-600 flex items-center gap-1 font-semibold">
+                    <span class="material-symbols-outlined text-[15px] text-red-600">error</span>
+                    <span>{{ errors.price }}</span>
+                  </p>
                 </div>
 
                 <div class="flex flex-col">
                   <label class="text-xs font-bold text-on-surface mb-1 uppercase tracking-wider" for="item-qty">
-                    Batch Portions *
+                    Batch Portions <span class="text-primary">*</span>
                   </label>
                   <div class="relative">
                     <input
                       v-model.number="itemQty"
-                      required
-                      min="1"
-                      class="w-full bg-surface text-on-surface text-sm px-3.5 py-2.5 sm:py-3 focus:outline-none focus:ring-2 focus:ring-primary rounded-xl shadow-sm border border-outline-variant/30 font-black"
+                      @input="clearError('quantity')"
+                      class="w-full bg-surface text-on-surface text-sm px-3.5 py-2.5 sm:py-3 focus:outline-none rounded-xl shadow-sm border font-black transition-all"
+                      :class="errors.quantity ? 'border-red-500 focus:border-red-500 ring-2 ring-red-500/20' : 'border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20'"
                       id="item-qty"
                       type="number"
+                      placeholder="6"
                     />
                   </div>
+                  <p v-if="errors.quantity" class="mt-1.5 text-xs text-red-600 flex items-center gap-1 font-semibold">
+                    <span class="material-symbols-outlined text-[15px] text-red-600">error</span>
+                    <span>{{ errors.quantity }}</span>
+                  </p>
                 </div>
               </div>
             </div>
 
-            <!-- Ready Time Selector -->
+            <!-- Serving Status Selector -->
             <div class="space-y-1.5">
-              <label class="text-xs font-bold text-on-surface uppercase tracking-wider block">Estimated Readiness</label>
-              <div class="grid grid-cols-4 gap-2">
+              <label class="text-xs font-bold text-on-surface uppercase tracking-wider block">Serving Status</label>
+              <div class="grid grid-cols-5 gap-1.5 sm:gap-2">
                 <button
                   v-for="opt in readyTimeOptions"
                   :key="opt"
                   type="button"
-                  @click="readyTime = opt"
-                  :class="readyTime === opt ? 'bg-primary text-on-primary font-bold shadow-md' : 'bg-surface text-on-surface border border-outline-variant hover:bg-surface-container'"
-                  class="py-2 sm:py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                  @click="readyTime = opt; clearError('customTime')"
+                  :class="readyTime === opt ? 'bg-primary text-on-primary font-bold shadow-md ring-2 ring-primary/20' : 'bg-surface text-on-surface border border-outline-variant hover:bg-surface-container'"
+                  class="py-2 sm:py-2.5 rounded-xl text-xs transition-all cursor-pointer text-center font-medium"
                 >
                   {{ opt }}
                 </button>
               </div>
+
+              <!-- Custom Time Input Box -->
+              <div
+                v-if="readyTime === 'Custom'"
+                class="p-3 bg-surface-container-low rounded-2xl border transition-all flex flex-wrap items-center gap-2.5 mt-2"
+                :class="errors.customTime ? 'border-red-500 ring-2 ring-red-500/20' : 'border-outline-variant/40'"
+              >
+                <span class="text-xs font-bold text-on-surface-variant flex items-center gap-1 shrink-0">
+                  <span class="material-symbols-outlined text-[16px] text-primary">schedule</span>
+                  <span>Set Time:</span>
+                </span>
+                <div class="flex items-center gap-1.5 bg-surface border border-outline-variant/40 rounded-xl px-2.5 py-1.5 focus-within:border-primary">
+                  <input
+                    v-model.number="customHours"
+                    @input="clearError('customTime')"
+                    type="number"
+                    min="0"
+                    max="24"
+                    placeholder="Hours"
+                    class="w-16 bg-transparent text-center font-bold text-xs text-on-surface focus:outline-none"
+                  />
+                  <span class="text-[11px] font-bold text-on-surface-variant">hr</span>
+                </div>
+                <span class="text-xs font-bold text-on-surface-variant">:</span>
+                <div class="flex items-center gap-1.5 bg-surface border border-outline-variant/40 rounded-xl px-2.5 py-1.5 focus-within:border-primary">
+                  <input
+                    v-model.number="customMinutes"
+                    @input="clearError('customTime')"
+                    type="number"
+                    min="0"
+                    max="59"
+                    placeholder="Mins"
+                    class="w-16 bg-transparent text-center font-bold text-xs text-on-surface focus:outline-none"
+                  />
+                  <span class="text-[11px] font-bold text-on-surface-variant">min</span>
+                </div>
+                <span v-if="customHours || customMinutes" class="text-xs font-bold text-primary ml-auto truncate">
+                  Ready in {{ (customHours ? customHours + ' hr ' : '') + (customMinutes ? customMinutes + ' mins' : '') }}
+                </span>
+              </div>
+              <p v-if="errors.customTime" class="mt-1.5 text-xs text-red-600 flex items-center gap-1 font-semibold">
+                <span class="material-symbols-outlined text-[15px] text-red-600">error</span>
+                <span>{{ errors.customTime }}</span>
+              </p>
             </div>
 
             <!-- Location -->
             <div class="space-y-1.5">
-              <div class="flex items-center justify-between">
-                <label class="text-xs font-bold text-on-surface uppercase tracking-wider">Broadcast Radius</label>
-                <span class="text-[11px] text-green-700 font-semibold">500m Live Radius</span>
-              </div>
-              <div class="flex items-center bg-surface p-3 rounded-xl shadow-sm gap-3 border border-outline-variant/20">
-                <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                  <span class="material-symbols-outlined text-[18px]">location_on</span>
+              <label class="text-xs font-bold text-on-surface uppercase tracking-wider block">Kitchen Pickup Location</label>
+              <div
+                @click="isMapModalOpen = true"
+                class="flex items-center bg-surface p-3 sm:p-3.5 rounded-xl shadow-sm gap-3 border border-outline-variant/20 hover:border-primary/50 cursor-pointer transition-all group"
+                title="Tap to adjust kitchen pickup pin on map"
+              >
+                <div class="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <span class="material-symbols-outlined text-[20px]">location_on</span>
                 </div>
                 <div class="flex flex-col min-w-0 flex-1">
-                  <span class="text-xs font-bold text-on-surface">Bhandup West, Mumbai</span>
-                  <span class="text-[10px] text-on-surface-variant">Live neighborhood broadcast</span>
+                  <span class="text-xs sm:text-sm font-bold text-on-surface truncate">
+                    {{ currentPickupAddress }}
+                  </span>
+                  <span class="text-[10px] text-on-surface-variant flex items-center gap-1">
+                    <span>Live broadcast from your kitchen</span>
+                    <span class="text-primary font-bold ml-1">• Tap to adjust</span>
+                  </span>
                 </div>
+                <span class="material-symbols-outlined text-on-surface-variant text-[18px]">edit_location</span>
               </div>
             </div>
 
@@ -334,5 +664,14 @@ async function handlePost() {
         <span class="text-[10px] font-semibold mt-0.5">Profile</span>
       </button>
     </nav>
+
+    <!-- Map Modal to adjust pickup pin if needed -->
+    <LocationPickerModal
+      :is-open="isMapModalOpen"
+      :initial-coordinates="currentCoordinates"
+      :initial-address="currentPickupAddress"
+      @confirm="handleLocationConfirmed"
+      @close="isMapModalOpen = false"
+    />
   </div>
 </template>

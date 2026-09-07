@@ -11,16 +11,19 @@ const vendorSchema = new mongoose.Schema(
     businessName: {
       type: String,
       required: true,
-      default: "Anjali's Kitchen",
       trim: true,
     },
     category: {
       type: String,
-      default: 'North Indian Home Cook',
+      default: '',
     },
     bio: {
       type: String,
-      default: 'Authentic home-cooked meals prepared with love and fresh ingredients daily.',
+      default: '',
+    },
+    experience: {
+      type: String,
+      default: '',
     },
     status: {
       type: String,
@@ -29,19 +32,19 @@ const vendorSchema = new mongoose.Schema(
     },
     rating: {
       type: Number,
-      default: 4.9,
+      default: 0,
     },
     totalReviews: {
       type: Number,
-      default: 28,
+      default: 0,
     },
     fssaiLicense: {
       type: String,
-      default: '21524021000842',
+      default: '',
     },
     coverImage: {
       type: String,
-      default: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCcCn3i8k4gYk-jLV5MXuqSONW-8QpGOpQ4yYcs-5HUarOFUR1kCq3boeWmwl-f7Seo8MV5gGPaYolyo8w_lFVLtdBGN11e9huwwnLqF4wUGtqAbHcuebFi79m5evx_bXkagJMfR6xqZSl0A3UhdKsMtGL_SyAxPz6EhwbTtY7oWANHjY08Msx9WdC5GF0cpXi4h-eS9GA4sfMmh7CCZv7Lu_elTf3lY2oNae4dUF5Fxdr0ktu3Ed5C',
+      default: '',
     },
     location: {
       type: {
@@ -51,11 +54,11 @@ const vendorSchema = new mongoose.Schema(
       },
       coordinates: {
         type: [Number], // [longitude, latitude]
-        default: [72.9355, 19.1492],
+        default: [73.0188, 19.0225],
       },
       pickupAddress: {
         type: String,
-        default: 'Wing B, Flat 402, Green Meadows, Bhandup West, Mumbai',
+        default: '',
       },
     },
     operatingHours: {

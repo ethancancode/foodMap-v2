@@ -20,6 +20,7 @@ export async function updateAvailability(req, res, next) {
         foodId: food._id,
         quantity: food.quantity,
         available: food.available,
+        isAvailable: food.available !== false && food.quantity > 0,
         status: food.status,
       });
 

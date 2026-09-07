@@ -31,14 +31,45 @@ export async function updateVendorProfile(vendorIdOrUserId, data) {
 
   let vendor = await Vendor.findOne({ $or: query });
 
+  const pickupAddress = data.pickupAddress || data.location?.pickupAddress;
+  const coordinates = data.coordinates || data.location?.coordinates;
+
   if (!vendor) {
     vendor = await Vendor.create({
       user: vendorIdOrUserId,
-      businessName: data.businessName || "Anjali's Kitchen",
+      businessName: data.businessName || "My Kitchen",
+      category: data.category || "Home Cook",
+      bio: data.bio || '',
+      experience: data.experience || '',
+      location: {
+        type: 'Point',
+        coordinates: coordinates || [73.0188, 19.0225],
+        pickupAddress: pickupAddress || '',
+      },
       ...data,
     });
   } else {
-    Object.assign(vendor, data);
+    if (data.businessName) vendor.businessName = data.businessName;
+    if (data.category) vendor.category = data.category;
+    if (data.bio !== undefined) vendor.bio = data.bio;
+    if (data.experience !== undefined) vendor.experience = data.experience;
+    if (data.status) vendor.status = data.status;
+    if (data.coverImage !== undefined) vendor.coverImage = data.coverImage;
+
+    if (pickupAddress || coordinates) {
+      if (!vendor.location) {
+        vendor.location = {
+          type: 'Point',
+          coordinates: coordinates || [73.0188, 19.0225],
+          pickupAddress: pickupAddress || '',
+        };
+      } else {
+        if (pickupAddress) vendor.location.pickupAddress = pickupAddress;
+        if (coordinates) vendor.location.coordinates = coordinates;
+      }
+      vendor.markModified('location');
+    }
+
     await vendor.save();
   }
 

@@ -32,6 +32,7 @@ export async function createFood(req, res, next) {
         foodId: food._id,
         quantity: food.quantity,
         available: food.available,
+        isAvailable: food.available !== false && food.quantity > 0,
         status: food.status,
       });
     }
@@ -56,6 +57,7 @@ export async function updateFood(req, res, next) {
         foodId: food._id,
         quantity: food.quantity,
         available: food.available,
+        isAvailable: food.available !== false && food.quantity > 0,
         status: food.status,
       });
 
