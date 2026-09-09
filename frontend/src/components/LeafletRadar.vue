@@ -29,9 +29,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, createVNode, render } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import MapDishPin from './MapDishPin.vue';
 
 const props = defineProps({
   userCoords: {
@@ -153,7 +154,7 @@ function updateFoodMarkers() {
 
   foodLayerGroup.clearLayers();
 
-  props.foods.forEach((food, index) => {
+  props.foods.forEach((food) => {
     const baseCoords =
       food.location?.coordinates ||
       food.vendor?.location?.coordinates ||
@@ -162,23 +163,14 @@ function updateFoodMarkers() {
     // GeoJSON is [lng, lat], Leaflet is [lat, lng]
     const [lng, lat] = baseCoords;
 
+    // Create a container element and mount the MapDishPin Vue component inside it
+    const el = document.createElement('div');
+    const vnode = createVNode(MapDishPin, { food });
+    render(vnode, el);
+
     const icon = L.divIcon({
       className: 'leaflet-food-marker-wrapper',
-      html: `
-        <div class="food-mapbox-marker group">
-          <div class="marker-card">
-            <img src="${food.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100'}" class="marker-thumb" />
-            <div class="marker-info">
-              <div class="marker-name">${food.name}</div>
-              <div class="marker-sub">
-                <span class="marker-price">₹${food.price}</span>
-                <span class="marker-stock">• ${food.quantity || 1} left</span>
-              </div>
-            </div>
-          </div>
-          <div class="marker-pointer"></div>
-        </div>
-      `,
+      html: el,
       iconSize: [160, 50],
       iconAnchor: [80, 50]
     });

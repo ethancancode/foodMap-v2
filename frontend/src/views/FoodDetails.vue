@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { onFoodAvailabilityUpdated } from '../services/socket.js'
 import { foodApi } from '../services/api.js'
 import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
@@ -20,38 +20,143 @@ const props = defineProps({
 
 const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
+function getPortions(f) {
+  if (!f) return 0
+  if (f.quantity !== undefined && f.quantity !== null) return Number(f.quantity)
+  if (f.portions !== undefined && f.portions !== null) return Number(f.portions)
+  return 6
+}
+
+function getAvailability(f) {
+  if (!f) return false
+  const qty = getPortions(f)
+  const avail = f.isAvailable !== undefined ? f.isAvailable : (f.available !== undefined ? f.available : true)
+  return Boolean(avail) && qty > 0
+}
+
 const selectedQty = ref(1)
-const currentPortions = ref(props.food?.portions ?? 6)
-const isAvailable = ref(props.food?.portions > 0)
+const currentPortions = ref(getPortions(props.food))
+const isAvailable = ref(getAvailability(props.food))
 const liveFlash = ref(false)
 
-const foodItem = computed(() => ({
-  id: props.food?.id || props.food?._id,
-  name: props.food?.name || 'Rajma Chawal',
-  price: props.food?.price || 80,
-  portions: currentPortions.value,
-  time: props.food?.time || 'Ready Now',
-  distance: props.food?.distance || '420m away',
-  vendorName: (typeof props.food?.vendorName === 'string' && props.food?.vendorName) ? props.food.vendorName : (typeof props.food?.vendor === 'string' ? props.food.vendor : (props.food?.vendor?.businessName || "Priya Kitchen")),
-  vendorId: props.food?.vendorId,
-  description: props.food?.desc || props.food?.description || 'Authentic homestyle delicacy freshly prepared with traditional spices.',
-  image: props.food?.image || 'https://lh3.googleusercontent.com/aida-public/AB6AXuCcCn3i8k4gYk-jLV5MXuqSONW-8QpGOpQ4yYcs-5HUarOFUR1kCq3boeWmwl-f7Seo8MV5gGPaYolyo8w_lFVLtdBGN11e9huwwnLqF4wUGtqAbHcuebFi79m5evx_bXkagJMfR6xqZSl0A3UhdKsMtGL_SyAxPz6EhwbTtY7oWANHjY08Msx9WdC5GF0cpXi4h-eS9GA4sfMmh7CCZv7Lu_elTf3lY2oNae4dUF5Fxdr0ktu3Ed5C'
-}))
+const fetchedFood = ref(null)
 
-let unsubAvailability
+async function refreshDishDetails() {
+  const targetFoodId = props.food?._id || props.food?.id
+  const isMongoId = typeof targetFoodId === 'string' && /^[0-9a-fA-F]{24}$/.test(targetFoodId)
 
-onMounted(async () => {
-  if (props.food?.id || props.food?._id) {
+  if (targetFoodId && isMongoId) {
     try {
-      const res = await foodApi.getFoodById(props.food?.id || props.food?._id)
+      const res = await foodApi.getFoodById(targetFoodId)
       const f = res?.food || res?.data
-      if (f && f.quantity !== undefined) {
-        currentPortions.value = f.quantity
-        isAvailable.value = (f.isAvailable !== false && f.available !== false) && f.quantity > 0
+      if (f) {
+        fetchedFood.value = f
+        if (f.quantity !== undefined) {
+          currentPortions.value = f.quantity
+          isAvailable.value = (f.isAvailable !== false && f.available !== false) && f.quantity > 0
+        }
       }
     } catch (e) {
       console.warn('Error refreshing food details:', e.message)
     }
+  }
+}
+
+watch(
+  () => props.food,
+  (newFood) => {
+    if (newFood) {
+      currentPortions.value = getPortions(newFood)
+      isAvailable.value = getAvailability(newFood)
+      selectedQty.value = 1
+      fetchedFood.value = null
+      refreshDishDetails()
+    }
+  },
+  { immediate: true, deep: true }
+)
+
+// Haversine distance calculator in meters
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 400
+  const R = 6371e3 // metres
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return Math.round(R * c)
+}
+
+const liveCoords = ref(null)
+
+const userCoords = computed(() => {
+  if (liveCoords.value) return liveCoords.value
+  if (props.user?.location?.coordinates) {
+    return {
+      lng: props.user.location.coordinates[0],
+      lat: props.user.location.coordinates[1]
+    }
+  }
+  return { lng: 73.0188, lat: 19.0225 }
+})
+
+const foodItem = computed(() => {
+  const src = fetchedFood.value || props.food || {}
+  const coords = src.location?.coordinates || src.vendor?.location?.coordinates || [73.0188, 19.0225]
+  const distM = calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, coords[1], coords[0])
+  const formattedDist = distM >= 1000 ? `${(distM / 1000).toFixed(1)}km away` : `${distM}m away`
+
+  const vName = src.vendorName || (typeof src.vendor === 'object' && src.vendor?.businessName) || (typeof src.vendor === 'string' && src.vendor) || "Home Chef's Kitchen"
+  const vAddr = src.pickupAddress || src.location?.pickupAddress || (typeof src.vendor === 'object' && src.vendor?.location?.pickupAddress) || (typeof src.vendor === 'object' && src.vendor?.pickupAddress) || 'Seawoods, Navi Mumbai'
+  const vRating = (typeof src.vendor === 'object' && src.vendor?.rating !== undefined && src.vendor?.rating !== null)
+    ? src.vendor.rating
+    : (src.rating !== undefined && src.rating !== null ? src.rating : 0)
+  const vReviews = (typeof src.vendor === 'object' && src.vendor?.totalReviews !== undefined && src.vendor?.totalReviews !== null)
+    ? src.vendor.totalReviews
+    : (src.reviews !== undefined && src.reviews !== null ? src.reviews : 0)
+
+  return {
+    id: src.id || src._id,
+    _id: src._id || src.id,
+    name: src.name || 'Delicious Dish',
+    price: src.price || 80,
+    portions: currentPortions.value,
+    quantity: currentPortions.value,
+    time: src.time || src.cookingStatus || 'Ready now',
+    cookingStatus: src.cookingStatus || src.timeReady || src.time || 'Ready now',
+    readyAt: src.readyAt || null,
+    createdAt: src.createdAt || null,
+    updatedAt: src.updatedAt || null,
+    distance: formattedDist,
+    pickupAddress: vAddr,
+    vendorName: vName,
+    vendorRating: vRating,
+    vendorReviews: vReviews,
+    vendorId: src.vendorId || src.vendor?._id || (typeof src.vendor === 'string' ? src.vendor : null),
+    description: src.desc || src.description || 'Authentic homestyle delicacy freshly prepared with traditional spices.',
+    image: src.image || 'https://lh3.googleusercontent.com/aida-public/AB6AXuCcCn3i8k4gYk-jLV5MXuqSONW-8QpGOpQ4yYcs-5HUarOFUR1kCq3boeWmwl-f7Seo8MV5gGPaYolyo8w_lFVLtdBGN11e9huwwnLqF4wUGtqAbHcuebFi79m5evx_bXkagJMfR6xqZSl0A3UhdKsMtGL_SyAxPz6EhwbTtY7oWANHjY08Msx9WdC5GF0cpXi4h-eS9GA4sfMmh7CCZv7Lu_elTf3lY2oNae4dUF5Fxdr0ktu3Ed5C'
+  }
+})
+
+let unsubAvailability
+
+onMounted(async () => {
+  if ('geolocation' in navigator) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        liveCoords.value = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000 }
+    )
   }
 
   unsubAvailability = onFoodAvailabilityUpdated((data) => {
@@ -59,6 +164,7 @@ onMounted(async () => {
     if (data.foodId === targetId || String(data.foodId) === String(targetId)) {
       const avail = data.isAvailable !== undefined ? data.isAvailable : (data.available !== false)
       isAvailable.value = avail && data.quantity > 0
+      currentPortions.value = data.quantity !== undefined ? data.quantity : currentPortions.value
       liveFlash.value = true
       setTimeout(() => {
         liveFlash.value = false
@@ -76,11 +182,12 @@ function navigateTo(route, payload = null) {
 }
 
 function reservePortion() {
-  if (!isAvailable.value || currentPortions.value <= 0) return
+  if (currentPortions.value <= 0) return
   emit('navigate', 'checkout', {
     food: {
       ...foodItem.value,
       quantity: selectedQty.value,
+      portions: currentPortions.value,
       totalAmount: foodItem.value.price * selectedQty.value
     }
   })
@@ -218,15 +325,22 @@ function reservePortion() {
                       <span>Distance</span>
                     </div>
                     <span class="text-xs sm:text-sm font-extrabold text-on-surface">{{ foodItem.distance }}</span>
-                    <span class="text-[10px] text-on-surface-variant">Bhandup West</span>
+                    <span class="text-[10px] text-on-surface-variant truncate">{{ foodItem.pickupAddress }}</span>
                   </div>
                   <div class="bg-surface-container-lowest p-3 rounded-2xl shadow-xs border border-outline-variant/20 flex flex-col gap-0.5">
                     <div class="flex items-center gap-1 text-primary text-[11px] font-bold">
                       <span class="material-symbols-outlined text-[16px]">schedule</span>
                       <span>Ready Time</span>
                     </div>
-                    <span class="text-xs sm:text-sm font-extrabold text-on-surface">{{ foodItem.time }}</span>
-                    <span class="text-[10px] text-on-surface-variant">Fresh batch</span>
+                    <span
+                      class="text-xs sm:text-sm font-extrabold"
+                      :class="countdown(foodItem).isReady ? 'text-green-700' : 'text-amber-800 font-mono'"
+                    >
+                      {{ countdown(foodItem).text }}
+                    </span>
+                    <span class="text-[10px] text-on-surface-variant">
+                      {{ countdown(foodItem).isReady ? 'Ready for pickup' : 'Fresh batch in progress' }}
+                    </span>
                   </div>
                 </div>
 
@@ -234,7 +348,7 @@ function reservePortion() {
                 <div class="flex flex-col gap-1.5">
                   <span class="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Cook & Kitchen</span>
                   <div
-                    @click="navigateTo('vendor_profile')"
+                    @click="navigateTo('vendor_profile', { vendorId: foodItem.vendorId, vendor: foodItem.vendorName })"
                     class="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface-container cursor-pointer transition-colors border border-outline-variant/20 bg-surface-container-lowest"
                   >
                     <div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
@@ -242,7 +356,14 @@ function reservePortion() {
                     </div>
                     <div class="flex flex-col flex-1">
                       <span class="text-xs sm:text-sm font-bold text-on-surface">{{ foodItem.vendorName }}</span>
-                      <span class="text-[11px] text-on-surface-variant">4.9 ★ (42+ reviews)</span>
+                      <span v-if="foodItem.vendorReviews > 0" class="text-[11px] text-on-surface-variant flex items-center gap-1">
+                        <span class="text-amber-600 font-bold">{{ foodItem.vendorRating ? foodItem.vendorRating.toFixed(1) : '5.0' }} ★</span>
+                        <span>({{ foodItem.vendorReviews }} {{ foodItem.vendorReviews === 1 ? 'review' : 'reviews' }})</span>
+                      </span>
+                      <span v-else class="text-[11px] text-on-surface-variant flex items-center gap-1">
+                        <span class="text-primary font-semibold">New Kitchen</span>
+                        <span>• No reviews yet</span>
+                      </span>
                     </div>
                     <span class="material-symbols-outlined text-on-surface-variant text-[18px]">chevron_right</span>
                   </div>

@@ -133,7 +133,7 @@ const navItems = computed(() => {
     },
     {
       id: 'explore_radar',
-      label: 'Explore Radar',
+      label: 'Explore Map',
       icon: 'explore',
       route: 'explore_radar',
     },

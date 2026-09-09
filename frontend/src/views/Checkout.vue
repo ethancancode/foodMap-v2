@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { orderApi } from '../services/api.js'
+import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
 
@@ -24,29 +25,112 @@ const specialInstructions = ref('')
 const isPaying = ref(false)
 const errorMessage = ref('')
 
+const liveCoords = ref(null)
+
+onMounted(() => {
+  if ('geolocation' in navigator) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        liveCoords.value = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000 }
+    )
+  }
+})
+
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 500
+  const R = 6371e3
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return Math.round(R * c)
+}
+
+const userCoords = computed(() => {
+  if (liveCoords.value) return liveCoords.value
+  if (props.user?.location?.coordinates) {
+    return {
+      lng: props.user.location.coordinates[0],
+      lat: props.user.location.coordinates[1]
+    }
+  }
+  return { lng: 73.0188, lat: 19.0225 }
+})
+
+const distanceMeters = computed(() => {
+  const f = props.food || {}
+  const coords = f.location?.coordinates || f.vendor?.location?.coordinates || [73.0188, 19.0225]
+  return calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, coords[1], coords[0])
+})
+
+// ₹6 per 500m (min ₹10 base fee)
+const calculatedDeliveryFee = computed(() => {
+  const dist = distanceMeters.value || 500
+  return Math.max(10, Math.ceil(dist / 500) * 6)
+})
+
+const deliveryFee = computed(() => (fulfillment.value === 'delivery' ? calculatedDeliveryFee.value : 0))
+
+const countdown = computed(() => {
+  void currentTimestamp.value
+  return getCookingCountdown(props.food)
+})
+
+// Travel time: 500m per minute + remaining cooking time
+const estDeliveryMinutes = computed(() => {
+  const dist = distanceMeters.value || 500
+  const travelMins = Math.max(3, Math.ceil(dist / 500))
+  const cookMins = countdown.value.isReady ? 0 : (countdown.value.remainingMinutes || 10)
+  return cookMins + travelMins
+})
+
+const pickupAddress = computed(() => {
+  const f = props.food || {}
+  return (
+    f.pickupAddress ||
+    f.location?.pickupAddress ||
+    (typeof f.vendor === 'object' && f.vendor?.location?.pickupAddress) ||
+    (typeof f.vendor === 'object' && f.vendor?.pickupAddress) ||
+    'Seawoods, Navi Mumbai'
+  )
+})
+
+watch(
+  () => props.food,
+  (newFood) => {
+    if (newFood) {
+      quantity.value = newFood.quantity || 1
+      errorMessage.value = ''
+    }
+  },
+  { immediate: true }
+)
+
 const foodId = computed(() => props.food?.id || props.food?._id)
 const itemPrice = computed(() => props.food?.price || 80)
-const itemName = computed(() => props.food?.name || 'Authentic Rajma Chawal')
+const itemName = computed(() => props.food?.name || 'Delicious Dish')
 const vendorName = computed(() => {
   const v = props.food?.vendorName || props.food?.vendor
   if (typeof v === 'string') return v
-  return v?.businessName || v?.name || 'Priya Kitchen'
+  return v?.businessName || v?.name || "Chef's Kitchen"
 })
-const itemImage = computed(() => props.food?.image || 'https://lh3.googleusercontent.com/aida-public/AB6AXuDafFZxnWsDWN7qKTYJnlTescjOm7k0iERE7lKpfB2DOFewnAuGRBkf4ocUXtqvpZjmz4KSOsOwe0aehBprIbEbO5OsklrbQYgCBG9xttPncOkUpk0NfRBo3K1JNZ0JaKdRffcxRpp3PdQwd0wbScixFwGCqcCVtTQ1rdSuLc0IiwmCzy9S0x2m6XrpiQz_ZzicvlbR_1YKJQ3q_8f11-3P0U9xKJp0RriHs6Qe-O6D7xbA8SS-rGMs')
-const maxAvailable = computed(() => props.food?.portions || 10)
+const itemImage = computed(() => props.food?.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600')
+const maxAvailable = computed(() => props.food?.portions || props.food?.quantity || 10)
 
 const itemSubtotal = computed(() => quantity.value * itemPrice.value)
-const deliveryFee = computed(() => (fulfillment.value === 'delivery' ? 30 : 0))
 const platformFee = 5
 const grandTotal = computed(() => itemSubtotal.value + deliveryFee.value + platformFee)
-
-function increaseQty() {
-  if (quantity.value < maxAvailable.value) quantity.value++
-}
-
-function decreaseQty() {
-  if (quantity.value > 1) quantity.value--
-}
 
 function navigateTo(route, payload = null) {
   emit('navigate', route, payload)
@@ -67,7 +151,7 @@ async function processPayment() {
       specialInstructions: specialInstructions.value,
       residentLocation: props.user?.location?.coordinates
         ? props.user.location
-        : { type: 'Point', coordinates: [72.9350, 19.1465] }
+        : { type: 'Point', coordinates: [userCoords.value.lng, userCoords.value.lat] }
     }
 
     const res = await orderApi.createOrder(payload)
@@ -78,7 +162,7 @@ async function processPayment() {
       emit('action', { action: 'toast', payload: { message: `Order #${orderObj.orderNumber} placed successfully!` } })
       const finalVendor = (typeof orderObj.vendorName === 'string' && orderObj.vendorName)
         ? orderObj.vendorName
-        : (typeof orderObj.vendor === 'string' ? orderObj.vendor : (orderObj.vendor?.businessName || vendorName.value || 'Priya Kitchen'))
+        : (typeof orderObj.vendor === 'string' ? orderObj.vendor : (orderObj.vendor?.businessName || vendorName.value || "Chef's Kitchen"))
 
       emit('navigate', 'order_confirmation', {
         order: {
@@ -93,7 +177,7 @@ async function processPayment() {
           platformFee: platformFee,
           total: orderObj.totalAmount || grandTotal.value,
           fulfillment: fulfillment.value,
-          address: orderObj.pickupAddress || 'Bhandup West, Mumbai',
+          address: orderObj.pickupAddress || pickupAddress.value,
           status: orderObj.status || 'PENDING',
           time: new Date(orderObj.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
@@ -129,14 +213,7 @@ async function processPayment() {
         back-route="food_details"
         :show-sync-badge="false"
         @navigate="navigateTo"
-      >
-        <template #actions>
-          <div class="flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary/10 px-3 py-1.5 rounded-full">
-            <span class="material-symbols-outlined text-[16px]">lock</span>
-            <span class="hidden sm:inline">Atomic Atlas Inventory Protection</span>
-          </div>
-        </template>
-      </AppHeader>
+      />
 
       <!-- Main Container -->
       <main class="relative pt-20 min-h-screen bg-background">
@@ -160,20 +237,13 @@ async function processPayment() {
                   ></div>
                   <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent"></div>
                   
-                  <div class="absolute top-4 left-4 flex items-center gap-2">
-                    <span class="bg-surface/90 backdrop-blur-md text-on-surface text-[12px] px-3 py-1 rounded-full font-bold shadow-sm flex items-center gap-1.5">
-                      <span class="w-2 h-2 rounded-full bg-green-500"></span>
-                      Verified Home Kitchen
-                    </span>
-                  </div>
-
                   <div class="absolute bottom-4 left-4 right-4 flex justify-between items-end">
                     <div>
                       <h2 class="text-xl lg:text-2xl text-white font-extrabold">{{ itemName }}</h2>
                       <div class="flex items-center gap-2 text-white/90 mt-1 text-xs">
                         <span class="font-bold">{{ vendorName }}</span>
                         <span>•</span>
-                        <span>Bhandup West, Mumbai</span>
+                        <span>{{ pickupAddress }}</span>
                       </div>
                     </div>
                     <div class="text-right bg-surface/95 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-md">
@@ -187,16 +257,6 @@ async function processPayment() {
                   <p class="text-xs text-on-surface-variant leading-relaxed">
                     Freshly cooked home meal with pure ingredients and hygienic small-batch preparation.
                   </p>
-                  <div class="grid grid-cols-2 gap-2 pt-2 border-t border-outline-variant/20">
-                    <div class="flex items-center gap-2 text-xs text-on-surface-variant bg-surface-container-low p-2.5 rounded-xl">
-                      <span class="material-symbols-outlined text-primary text-[16px]">verified</span>
-                      <span class="font-semibold">Neighborhood Fresh</span>
-                    </div>
-                    <div class="flex items-center gap-2 text-xs text-on-surface-variant bg-surface-container-low p-2.5 rounded-xl">
-                      <span class="material-symbols-outlined text-green-600 text-[16px]">eco</span>
-                      <span class="font-semibold">No Preservatives</span>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -207,28 +267,15 @@ async function processPayment() {
               <div class="bg-surface rounded-2xl p-5 shadow-sm border border-outline-variant/20 flex flex-col gap-4">
                 <h3 class="text-base text-on-surface border-b border-outline-variant/20 pb-3 font-bold">Order Details</h3>
                 
-                <!-- Quantity Selector -->
+                <!-- Selected Portions (Read-only as chosen on Food Details) -->
                 <div class="flex items-center justify-between">
                   <div class="flex flex-col">
-                    <span class="text-sm text-on-surface font-bold">Portions to reserve</span>
+                    <span class="text-sm text-on-surface font-bold">Selected Portions</span>
                     <span class="text-xs text-on-surface-variant font-medium">₹{{ itemPrice }} each</span>
                   </div>
-                  <div class="flex items-center bg-surface-container rounded-xl p-1 border border-outline-variant/20">
-                    <button
-                      @click="decreaseQty"
-                      aria-label="Decrease quantity"
-                      class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface hover:bg-surface-variant active:scale-95 transition-all cursor-pointer font-bold"
-                    >
-                      -
-                    </button>
-                    <span class="w-10 text-center text-base text-primary font-black">{{ quantity }}</span>
-                    <button
-                      @click="increaseQty"
-                      aria-label="Increase quantity"
-                      class="w-9 h-9 rounded-lg bg-primary text-on-primary flex items-center justify-center shadow-md hover:bg-primary/90 active:scale-95 transition-all cursor-pointer font-bold"
-                    >
-                      +
-                    </button>
+                  <div class="flex items-center gap-1.5 px-3.5 py-2 bg-surface-container rounded-xl border border-outline-variant/20">
+                    <span class="text-sm text-primary font-black">{{ quantity }}</span>
+                    <span class="text-xs text-on-surface-variant font-semibold">{{ quantity === 1 ? 'portion' : 'portions' }}</span>
                   </div>
                 </div>
 
@@ -244,7 +291,9 @@ async function processPayment() {
                     >
                       <span class="material-symbols-outlined text-[24px]" :class="fulfillment === 'pickup' ? 'text-primary' : 'text-on-surface-variant'">storefront</span>
                       <span class="text-xs font-bold" :class="fulfillment === 'pickup' ? 'text-primary' : 'text-on-surface'">Self Pickup</span>
-                      <span class="text-[10px] text-on-surface-variant">Ready in 10-15m (Free)</span>
+                      <span class="text-[10px] text-on-surface-variant font-medium">
+                        {{ countdown.isReady ? 'Ready for pickup (Free)' : `Ready in ${countdown.text} (Free)` }}
+                      </span>
                     </button>
 
                     <button
@@ -255,7 +304,9 @@ async function processPayment() {
                     >
                       <span class="material-symbols-outlined text-[24px]" :class="fulfillment === 'delivery' ? 'text-primary' : 'text-on-surface-variant'">directions_bike</span>
                       <span class="text-xs font-bold" :class="fulfillment === 'delivery' ? 'text-primary' : 'text-on-surface'">Direct Delivery</span>
-                      <span class="text-[10px] text-on-surface-variant">Est. 20-30m (+₹30)</span>
+                      <span class="text-[10px] text-on-surface-variant font-medium">
+                        Est. {{ estDeliveryMinutes }}m (+₹{{ calculatedDeliveryFee }})
+                      </span>
                     </button>
                   </div>
 
@@ -283,8 +334,8 @@ async function processPayment() {
                     <span class="font-bold">₹{{ itemSubtotal }}</span>
                   </div>
                   <div v-if="fulfillment === 'delivery'" class="flex justify-between items-center text-on-surface-variant">
-                    <span>Neighbor Runner Fee</span>
-                    <span>₹{{ deliveryFee }}</span>
+                    <span>Direct Delivery Fee ({{ distanceMeters >= 1000 ? (distanceMeters/1000).toFixed(1) + 'km' : distanceMeters + 'm' }})</span>
+                    <span class="font-semibold text-on-surface">₹{{ deliveryFee }}</span>
                   </div>
                   <div v-else class="flex justify-between items-center text-on-surface-variant">
                     <span>Self Pickup Fee</span>

@@ -216,22 +216,17 @@ function openFoodDetail(item) {
   const distM = calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, itemCoords[1], itemCoords[0])
   emit('navigate', 'food_details', {
     food: {
+      ...item,
       id: item._id || item.id,
-      name: item.name,
-      vendorName: item.vendorName,
-      vendorId: item.vendorId,
-      price: item.price,
       portions: item.quantity,
       initialPortions: item.initialQuantity || item.quantity,
-      time: item.cookingStatus || 'Ready now',
+      time: item.cookingStatus || item.timeReady || 'Ready now',
+      cookingStatus: item.cookingStatus || item.timeReady || 'Ready now',
+      readyAt: item.readyAt || null,
+      createdAt: item.createdAt || null,
+      updatedAt: item.updatedAt || null,
       distance: `${distM}m away`,
       rating: 4.9,
-      image: item.image,
-      desc: item.description,
-      diet: item.diet,
-      category: item.category,
-      tags: item.tags,
-      location: item.location
     }
   })
 }
