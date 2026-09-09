@@ -292,6 +292,7 @@ async function verifyOtp() {
     const res = await authStore.verifyOtp({
       phone: formattedPhone(),
       otp: otpDigits.value.join(''),
+      role: selectedRole.value,
     })
 
     const isNewUser = Boolean(res?.isNewUser)

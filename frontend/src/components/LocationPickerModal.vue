@@ -124,17 +124,14 @@ function initMap() {
   map = L.map(mapContainer.value, {
     center: [initialLat, initialLng],
     zoom: 16,
-    zoomSnap: 0.5,
-    zoomControl: false,
+    zoomSnap: 0.25,
+    zoomControl: true,
+    attributionControl: false,
   })
 
-  // Add zoom control top-right
-  L.control.zoom({ position: 'topright' }).addTo(map)
-
-  // OpenStreetMap Tile Layer
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  // Esri World Street Map (Matches resident radar map: clean roads, highways, 0 religious symbols, 0 watermarks, 100% free)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors',
   }).addTo(map)
 
   // Draggable Kitchen Pin Marker
@@ -707,5 +704,24 @@ onBeforeUnmount(() => {
   background: rgba(0, 0, 0, 0.35);
   filter: blur(1.5px);
   z-index: 0;
+}
+
+/* Clean modern map rendering matching resident radar */
+.leaflet-container .leaflet-tile {
+  filter: saturate(0.85) contrast(1.05) brightness(1.02);
+}
+
+/* Prevent any square focus outline */
+.leaflet-container,
+.leaflet-container svg,
+.leaflet-container svg path,
+.leaflet-container path,
+.leaflet-interactive,
+.leaflet-interactive:focus,
+.leaflet-pane,
+.leaflet-pane:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 </style>

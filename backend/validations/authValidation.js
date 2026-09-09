@@ -14,6 +14,7 @@ export const requestOtpSchema = z.object({
 export const verifyOtpSchema = z.object({
   phone: z.string().min(8, 'Phone number is required'),
   otp: z.string().min(6, 'Verification code must be 6 digits').max(6, 'Verification code must be 6 digits'),
+  role: z.enum(['resident', 'vendor']).optional(),
   name: z.string().optional(),
   businessName: z.string().optional(),
   specialties: z.string().optional(),

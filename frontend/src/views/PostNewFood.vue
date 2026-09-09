@@ -1,9 +1,11 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { foodApi, vendorApi } from '../services/api.js'
 import LocationPickerModal from '../components/LocationPickerModal.vue'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
+
+const DRAFT_KEY = 'foodmap_post_food_draft'
 
 const props = defineProps({
   user: Object,
@@ -14,7 +16,7 @@ const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
 const vendorProfile = ref(null)
 
-// Reactive Form State (empty by default for new dishes)
+// Reactive Form State (restored from draft if present)
 const itemName = ref('')
 const itemPrice = ref('')
 const itemQty = ref(6)
@@ -28,6 +30,61 @@ const itemImage = ref('')
 const isPosting = ref(false)
 const foodFileInput = ref(null)
 const isMapModalOpen = ref(false)
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return
+    const draft = JSON.parse(raw)
+    if (draft.itemName !== undefined) itemName.value = draft.itemName
+    if (draft.itemPrice !== undefined) itemPrice.value = draft.itemPrice
+    if (draft.itemQty !== undefined) itemQty.value = draft.itemQty
+    if (draft.readyTime !== undefined) readyTime.value = draft.readyTime
+    if (draft.customHours !== undefined) customHours.value = draft.customHours
+    if (draft.customMinutes !== undefined) customMinutes.value = draft.customMinutes
+    if (draft.itemCategory !== undefined) itemCategory.value = draft.itemCategory
+    if (draft.isVeg !== undefined) isVeg.value = draft.isVeg
+    if (draft.itemDesc !== undefined) itemDesc.value = draft.itemDesc
+    if (draft.itemImage !== undefined) itemImage.value = draft.itemImage
+  } catch (e) {
+    console.warn('Failed to restore post food draft', e)
+  }
+}
+
+function saveDraft() {
+  try {
+    const draft = {
+      itemName: itemName.value,
+      itemPrice: itemPrice.value,
+      itemQty: itemQty.value,
+      readyTime: readyTime.value,
+      customHours: customHours.value,
+      customMinutes: customMinutes.value,
+      itemCategory: itemCategory.value,
+      isVeg: isVeg.value,
+      itemDesc: itemDesc.value,
+      itemImage: itemImage.value
+    }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  } catch (e) {
+    console.warn('Failed to save post food draft', e)
+  }
+}
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY)
+  } catch (e) {}
+}
+
+// Watch all form fields and persist
+watch(
+  [itemName, itemPrice, itemQty, readyTime, customHours, customMinutes, itemCategory, isVeg, itemDesc, itemImage],
+  () => {
+    saveDraft()
+  },
+  { deep: true }
+)
 
 const currentPickupAddress = computed(() => {
   return (
@@ -46,6 +103,7 @@ const currentCoordinates = computed(() => {
 })
 
 onMounted(async () => {
+  loadDraft()
   try {
     const res = await vendorApi.getMyProfile().catch(() => null)
     if (res?.vendor) {
@@ -253,6 +311,7 @@ async function handlePost() {
 
     const createdFood = res?.food || res?.data || res
     if (createdFood && (createdFood._id || createdFood.id || createdFood.name)) {
+      clearDraft()
       createdFood.available = true
       createdFood.isAvailable = true
       emit('action', {

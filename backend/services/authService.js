@@ -74,7 +74,14 @@ export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
     };
   }
 
-  if (user.isTotpSetup) {
+  if (user && user.role !== role) {
+    const existingTitle = user.role === 'vendor' ? 'a Vendor' : 'a Resident';
+    const err = new Error(`You have ${existingTitle} account registered to this number.`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (user && user.isTotpSetup) {
     // Already enrolled user: NEVER send a new secret or QR code
     return {
       success: true,
@@ -144,6 +151,14 @@ export async function verifyOTP(phoneOrPayload, otpArg, roleArg, nameArg) {
 
   if (!user || !user.totpSecret) {
     const err = new Error('No account found for this phone number. Please register first');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const role = payload.role || roleArg;
+  if (role && user.role !== role) {
+    const existingTitle = user.role === 'vendor' ? 'a Vendor' : 'a Resident';
+    const err = new Error(`You have ${existingTitle} account registered to this number.`);
     err.statusCode = 400;
     throw err;
   }
