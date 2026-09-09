@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
+import AppSidebar from '../components/AppSidebar.vue'
+import AppHeader from '../components/AppHeader.vue'
 
 const props = defineProps({
   food: Object,
@@ -61,107 +63,28 @@ function navigateTo(route, payload = null) {
 
 <template>
   <div class="component-root w-full min-h-screen bg-background text-on-surface pb-20 lg:pb-0">
-    <!-- Backdrop for Mobile Sidebar Drawer -->
-    <div
-      v-if="isMobileSidebarOpen"
-      @click="isMobileSidebarOpen = false"
-      class="fixed inset-0 bg-black/40 z-50 lg:hidden backdrop-blur-xs transition-opacity"
-    ></div>
-
-    <!-- Navigation Sidebar (Drawer on Mobile, Fixed Bar on Desktop) -->
-    <aside
-      :class="isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
-      class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.06)] transition-transform duration-300 ease-in-out"
-    >
-      <div class="p-4 lg:p-stack-lg flex items-center justify-between">
-        <button @click="navigateTo('vendor_dashboard')" class="flex items-center gap-base text-left cursor-pointer">
-          <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md">
-            <span class="material-symbols-outlined text-on-primary">soup_kitchen</span>
-          </div>
-          <div class="flex flex-col">
-            <span class="font-headline-lg text-title-md tracking-tight text-primary font-bold">FoodMap</span>
-            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">Vendor Portal</span>
-          </div>
-        </button>
-        <!-- Close button for mobile drawer -->
-        <button
-          @click="isMobileSidebarOpen = false"
-          class="lg:hidden p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high"
-        >
-          <span class="material-symbols-outlined text-[20px]">close</span>
-        </button>
-      </div>
-
-      <nav class="flex-1 px-base space-y-stack-sm mt-2">
-        <button
-          @click="navigateTo('vendor_dashboard')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer"
-        >
-          <span class="material-symbols-outlined mr-gutter">dashboard</span>
-          <span class="font-label-md">Kitchen Hub</span>
-        </button>
-        <button
-          @click="navigateTo('post_new_food')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer"
-        >
-          <span class="material-symbols-outlined mr-gutter">add_circle</span>
-          <span class="font-label-md">Post New Food</span>
-        </button>
-        <button
-          @click="navigateTo('new_order')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer"
-        >
-          <span class="material-symbols-outlined mr-gutter">notifications_active</span>
-          <span class="font-label-md">Incoming Orders</span>
-        </button>
-        <button
-          @click="navigateTo('vendor_profile')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer"
-        >
-          <span class="material-symbols-outlined mr-gutter">storefront</span>
-          <span class="font-label-md">Kitchen Profile</span>
-        </button>
-      </nav>
-
-      <!-- Sidebar Footer -->
-      <div class="px-base py-stack-lg border-t border-outline-variant/20 space-y-stack-sm">
-        <div
-          @click="navigateTo('vendor_profile')"
-          class="w-full flex items-center gap-gutter px-gutter py-stack-md rounded-xl bg-surface-container-lowest border border-outline-variant/20 hover:border-primary/40 transition-colors text-left cursor-pointer"
-        >
-          <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-            {{ kitchenDisplayName.charAt(0).toUpperCase() }}
-          </div>
-          <div class="flex flex-col min-w-0">
-            <span class="font-label-md text-on-surface leading-normal text-xs font-bold truncate">{{ kitchenDisplayName }}</span>
-          </div>
-        </div>
-
-        <button
-          @click="navigateTo('welcome')"
-          class="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-on-surface-variant hover:text-on-surface hover:bg-surface-container text-xs font-medium transition-colors cursor-pointer"
-        >
-          <span class="material-symbols-outlined text-[16px]">logout</span>
-          <span>Sign Out</span>
-        </button>
-      </div>
-    </aside>
+    <!-- Unified Vendor Sidebar -->
+    <AppSidebar
+      :is-open="isMobileSidebarOpen"
+      role="vendor"
+      active-route="kitchen_hub"
+      :user="props.user"
+      @close="isMobileSidebarOpen = false"
+      @navigate="navigateTo"
+      @logout="navigateTo('welcome')"
+    />
 
     <!-- Main Content Area -->
     <div class="pl-0 lg:pl-72">
-      <header class="fixed top-0 left-0 lg:left-72 right-0 h-16 lg:h-20 bg-surface/90 backdrop-blur-md z-40 flex items-center px-3 sm:px-container-margin justify-between border-b border-outline-variant/20 gap-2">
-        <!-- Mobile Drawer Toggle -->
-        <button
-          @click="isMobileSidebarOpen = true"
-          class="lg:hidden p-2 rounded-xl text-on-surface hover:bg-surface-container-high focus:outline-none"
-          aria-label="Open menu"
-        >
-          <span class="material-symbols-outlined text-[24px]">menu</span>
-        </button>
-        <div class="flex items-center gap-2">
-          <span class="font-title-md font-bold text-on-surface">Broadcast Active</span>
-        </div>
-      </header>
+      <!-- Unified Header -->
+      <AppHeader
+        title="Broadcast Active"
+        :role="props.currentRole || 'vendor'"
+        :user="props.user"
+        :show-sync-badge="true"
+        @toggle-sidebar="isMobileSidebarOpen = true"
+        @navigate="navigateTo"
+      />
 
       <main class="relative pt-16 lg:pt-20 min-h-screen bg-background flex items-center justify-center p-container-margin">
         <div class="relative flex flex-col items-center max-w-lg w-full text-center z-10 bg-surface-container-low p-8 rounded-2xl shadow-md border border-outline-variant/20">

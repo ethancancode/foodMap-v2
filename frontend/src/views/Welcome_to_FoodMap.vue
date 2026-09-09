@@ -2,7 +2,7 @@
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useAuthStore } from '../stores/authStore.js'
 import { authApi, vendorApi } from '../services/api.js'
-import LocationPickerModal from './LocationPickerModal.vue'
+import LocationPickerModal from '../components/LocationPickerModal.vue'
 
 const emit = defineEmits(['auth-success', 'explore-guest', 'role-selected'])
 

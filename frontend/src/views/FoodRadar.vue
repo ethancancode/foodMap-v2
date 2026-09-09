@@ -8,7 +8,10 @@ import {
   onFoodDeleted,
   onVendorUpdated
 } from '../services/socket.js'
-import LeafletRadar from './LeafletRadar.vue'
+import LeafletRadar from '../components/LeafletRadar.vue'
+import AppSidebar from '../components/AppSidebar.vue'
+import AppHeader from '../components/AppHeader.vue'
+import ResidentFoodCard from '../components/ResidentFoodCard.vue'
 import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
 
 // Re-evaluates every second as currentTimestamp ticks
@@ -378,171 +381,34 @@ function toggleRole() {
 
 <template>
   <div class="component-root w-full min-h-screen bg-background text-on-surface pb-20 lg:pb-0">
-    <!-- Backdrop for Mobile Sidebar Drawer -->
-    <div
-      v-if="isMobileSidebarOpen"
-      @click="isMobileSidebarOpen = false"
-      class="fixed inset-0 bg-black/40 z-50 lg:hidden backdrop-blur-xs transition-opacity"
-    ></div>
-
-    <!-- Navigation Sidebar (Drawer on Mobile, Fixed Bar on Desktop) -->
-    <aside
-      :class="isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
-      class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.06)] transition-transform duration-300 ease-in-out"
-    >
-      <div class="p-4 lg:p-stack-lg flex items-center justify-between">
-        <div class="flex items-center gap-base">
-          <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md">
-            <span class="material-symbols-outlined text-on-primary">map</span>
-          </div>
-          <div class="flex flex-col">
-            <span class="font-headline-lg text-title-md tracking-tight text-primary font-bold">FoodMap</span>
-            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">Live Neighborhood Radar</span>
-          </div>
-        </div>
-        <!-- Close button for mobile drawer -->
-        <button
-          @click="isMobileSidebarOpen = false"
-          class="lg:hidden p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high"
-        >
-          <span class="material-symbols-outlined text-[20px]">close</span>
-        </button>
-      </div>
-
-      <nav class="flex-1 px-4 flex flex-col gap-3 mt-3">
-        <button
-          @click="navigateTo('food_radar'); isMobileSidebarOpen = false"
-          class="w-full flex items-center px-4 py-3 rounded-2xl transition-all bg-primary text-on-primary font-bold shadow-sm cursor-pointer"
-        >
-          <span class="material-symbols-outlined mr-3 text-[22px]">explore</span>
-          <span class="font-label-md text-sm">Live Radar</span>
-        </button>
-
-        <!-- Guest Exploration Prompt / Role badge -->
-        <div
-          v-if="!props.user || props.currentRole === 'guest'"
-          class="w-full p-4 bg-primary/10 border border-primary/20 rounded-2xl flex flex-col gap-2.5 shadow-xs"
-        >
-          <div class="flex items-center gap-2 text-primary font-bold text-xs">
-            <span class="material-symbols-outlined text-[18px]">travel_explore</span>
-            <span>Guest Mode</span>
-          </div>
-          <p class="text-[11px] text-on-surface-variant leading-relaxed">
-            Sign in to track orders, save kitchens, and customize your profile.
-          </p>
-          <button
-            @click="goToSignIn"
-            class="w-full py-2.5 px-3 bg-primary text-on-primary rounded-xl text-xs font-bold hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-          >
-            <span class="material-symbols-outlined text-[16px]">login</span>
-            <span>Sign In</span>
-          </button>
-        </div>
-
-        <!-- Orders & Profile only for registered users -->
-        <template v-if="props.user && props.currentRole !== 'guest'">
-          <button
-            @click="navigateTo('order_status'); isMobileSidebarOpen = false"
-            class="w-full flex items-center px-4 py-3 rounded-2xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer"
-          >
-            <span class="material-symbols-outlined mr-3 text-[22px]">receipt_long</span>
-            <span class="font-label-md text-sm">My Orders</span>
-          </button>
-          <button
-            @click="navigateTo('resident_profile'); isMobileSidebarOpen = false"
-            class="w-full flex items-center px-4 py-3 rounded-2xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer"
-          >
-            <span class="material-symbols-outlined mr-3 text-[22px]">person</span>
-            <span class="font-label-md text-sm">Resident Profile</span>
-          </button>
-        </template>
-      </nav>
-
-
-
-      <!-- Sidebar Footer -->
-      <div class="px-base py-stack-lg border-t border-outline-variant/20 space-y-stack-sm">
-        <div
-          @click="handleAccountClick(); isMobileSidebarOpen = false"
-          class="w-full flex items-center gap-gutter px-gutter py-stack-md rounded-xl bg-surface-container-lowest border border-outline-variant/20 hover:border-primary/40 transition-colors text-left cursor-pointer"
-        >
-          <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-            {{ (!props.user || props.currentRole === 'guest') ? '?' : (props.user?.name?.charAt(0) || 'N') }}
-          </div>
-          <div class="flex flex-col">
-            <span class="font-label-md text-on-surface leading-none text-xs font-bold">
-              {{ (!props.user || props.currentRole === 'guest') ? 'Guest Explorer' : (props.user?.name || 'Nikhil') }}
-            </span>
-            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider mt-0.5 font-medium">
-              {{ (!props.user || props.currentRole === 'guest') ? 'Tap to Sign In' : 'Bhandup West' }}
-            </span>
-          </div>
-        </div>
-
-        <button
-          @click="navigateTo('welcome'); isMobileSidebarOpen = false"
-          class="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-on-surface-variant hover:text-on-surface hover:bg-surface-container text-xs font-medium transition-colors cursor-pointer"
-        >
-          <span class="material-symbols-outlined text-[16px]">logout</span>
-          <span>{{ (!props.user || props.currentRole === 'guest') ? 'Sign In / Register' : 'Switch Account' }}</span>
-        </button>
-      </div>
-
-    </aside>
+    <!-- Reusable AppSidebar -->
+    <AppSidebar
+      :is-open="isMobileSidebarOpen"
+      :role="props.currentRole || (props.user ? 'resident' : 'guest')"
+      activeRoute="food_radar"
+      :user="props.user"
+      @close="isMobileSidebarOpen = false"
+      @navigate="navigateTo"
+      @sign-in="navigateTo('welcome')"
+      @logout="navigateTo('welcome')"
+    />
 
     <!-- Content Area (Adaptive left margin for desktop vs mobile) -->
     <div class="pl-0 lg:pl-72">
-      <!-- Header (Sticky topbar with Mobile Hamburger, Search and Actions) -->
-      <header class="fixed top-0 left-0 lg:left-72 right-0 h-16 lg:h-20 bg-surface/90 backdrop-blur-xl z-40 flex items-center px-3 sm:px-6 justify-between border-b border-outline-variant/20 gap-2">
-        <!-- Mobile Sidebar Toggle -->
-        <button
-          @click="isMobileSidebarOpen = true"
-          class="lg:hidden p-2 rounded-xl text-on-surface hover:bg-surface-container-high focus:outline-none shrink-0"
-          aria-label="Open menu"
-        >
-          <span class="material-symbols-outlined text-[24px]">menu</span>
-        </button>
-
-        <!-- Search bar -->
-        <div class="flex-1 max-w-xl">
-          <div class="flex items-center bg-surface-container-high/60 rounded-full px-3 py-1.5 lg:px-gutter lg:py-2 border border-outline-variant/30 hover:border-primary/40 transition-colors">
-            <span class="material-symbols-outlined text-primary mr-1.5 text-[18px] lg:text-[20px]">search</span>
-            <input
-              v-model="searchQuery"
-              placeholder="Search dishes, Rajma, Poha..."
-              class="bg-transparent border-none outline-none text-xs lg:text-sm text-on-surface font-medium w-full placeholder-on-surface-variant/70"
-            />
-            <button v-if="searchQuery" @click="searchQuery = ''" class="text-on-surface-variant hover:text-on-surface">
-              <span class="material-symbols-outlined text-[16px]">close</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 shrink-0">
-          <!-- Active MongoDB Status Indicator (hidden on small mobile) -->
-          <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-green-50 text-green-700 rounded-full border border-green-200 text-[11px] font-semibold">
-            <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-            <span>Live Sync</span>
-          </div>
-
-          <button
-            v-if="!props.user || props.currentRole === 'guest'"
-            @click="goToSignIn"
-            class="flex items-center gap-1.5 bg-primary text-on-primary hover:bg-primary/90 px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl cursor-pointer transition-all shadow-sm font-label-md text-xs font-bold"
-          >
-            <span class="material-symbols-outlined text-[18px]">login</span>
-            <span>Sign In</span>
-          </button>
-          <button
-            v-else
-            @click="navigateTo('order_status')"
-            class="flex items-center gap-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface px-3 py-1.5 lg:px-4 lg:py-2 rounded-xl cursor-pointer transition-all border border-outline-variant/20 font-label-md text-xs font-bold"
-          >
-            <span class="material-symbols-outlined text-primary text-[18px]">receipt_long</span>
-            <span class="hidden sm:inline">My Orders</span>
-          </button>
-        </div>
-      </header>
+      <!-- Unified Header -->
+      <AppHeader
+        :show-search="true"
+        v-model:search-model="searchQuery"
+        search-placeholder="Search dishes, Rajma, Poha..."
+        :show-sync-badge="true"
+        sync-label="Live Sync"
+        :role="props.currentRole || (props.user ? 'resident' : 'guest')"
+        :user="props.user"
+        :show-orders-button="true"
+        :show-sign-in-button="true"
+        @toggle-sidebar="isMobileSidebarOpen = true"
+        @navigate="navigateTo"
+      />
 
 
       <!-- Main Content -->
@@ -603,172 +469,87 @@ function toggleRole() {
                   Street Food
                 </button>
               </div>
-
-              <!-- Mobile Toggle Button (List vs Map) -->
-              <div class="flex lg:hidden shrink-0 bg-surface-container rounded-full p-0.5 border border-outline-variant/30">
-                <button
-                  @click="mobileViewMode = 'feed'"
-                  :class="mobileViewMode === 'feed' ? 'bg-primary text-on-primary font-bold shadow-xs' : 'text-on-surface-variant'"
-                  class="p-1.5 px-2.5 rounded-full text-xs flex items-center gap-1"
-                >
-                  <span class="material-symbols-outlined text-[16px]">grid_view</span>
-                  <span class="hidden xs:inline text-[11px]">Feed</span>
-                </button>
-                <button
-                  @click="mobileViewMode = 'map'"
-                  :class="mobileViewMode === 'map' ? 'bg-primary text-on-primary font-bold shadow-xs' : 'text-on-surface-variant'"
-                  class="p-1.5 px-2.5 rounded-full text-xs flex items-center gap-1"
-                >
-                  <span class="material-symbols-outlined text-[16px]">map</span>
-                  <span class="hidden xs:inline text-[11px]">Map</span>
-                </button>
-              </div>
             </div>
           </div>
 
-          <!-- Main Split View (Food Feed + Interactive Map Radar) -->
-          <div class="flex flex-col lg:flex-row flex-1 min-h-[calc(100vh-180px)]">
-            <!-- LEFT: Food Feed (Visible on Desktop OR when mobileViewMode is 'feed') -->
-            <div
-              :class="mobileViewMode === 'feed' ? 'block' : 'hidden lg:block'"
-              class="w-full lg:w-[55%] xl:w-[52%] h-full overflow-y-auto px-4 sm:px-container-margin pb-section-gap pt-3"
-            >
-              <!-- Distance & Diet Sub-filters -->
-              <div class="flex items-center justify-between gap-2 mb-4 overflow-x-auto pb-2 hide-scrollbar sticky top-0 bg-background/95 backdrop-blur-md z-20 pt-1 border-b border-outline-variant/10">
-                <div class="flex items-center gap-1.5">
-                  <span class="text-xs font-bold text-on-surface-variant mr-1">Radius:</span>
-                  <button
-                    @click="selectedDistance = '500m'"
-                    :class="selectedDistance === '500m' ? 'border-primary text-primary bg-primary/10 font-bold' : 'border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high'"
-                    class="whitespace-nowrap px-2.5 py-1 rounded-full border text-xs transition-all cursor-pointer"
-                  >
-                    500m
-                  </button>
-                  <button
-                    @click="selectedDistance = '1km'"
-                    :class="selectedDistance === '1km' ? 'border-primary text-primary bg-primary/10 font-bold' : 'border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high'"
-                    class="whitespace-nowrap px-2.5 py-1 rounded-full border text-xs transition-all cursor-pointer"
-                  >
-                    1 km
-                  </button>
-                  <button
-                    @click="selectedDistance = '3km'"
-                    :class="selectedDistance === '3km' ? 'border-primary text-primary bg-primary/10 font-bold' : 'border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high'"
-                    class="whitespace-nowrap px-2.5 py-1 rounded-full border text-xs transition-all cursor-pointer"
-                  >
-                    3 km
-                  </button>
-                </div>
-
-                <div class="flex items-center gap-1.5">
-                  <button
-                    @click="selectedDiet = selectedDiet === 'veg' ? 'all' : 'veg'"
-                    :class="selectedDiet === 'veg' ? 'bg-green-600 text-white font-bold' : 'bg-surface-container text-on-surface-variant'"
-                    class="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer"
-                  >
-                    <span class="w-2 h-2 rounded-full border border-current"></span>
-                    <span>Veg only</span>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Loading State -->
-              <div v-if="isLoading" class="py-16 flex flex-col items-center justify-center gap-3 text-on-surface-variant">
-                <div class="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
-                <span class="text-xs font-semibold">Scanning live neighborhood kitchens...</span>
-              </div>
-
-              <!-- Empty State -->
-              <div v-else-if="filteredFoods.length === 0" class="py-12 flex flex-col items-center justify-center text-center p-6 bg-surface-container-low rounded-2xl border border-outline-variant/20">
-                <div class="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center text-primary mb-3">
-                  <span class="material-symbols-outlined text-[28px]">search_off</span>
-                </div>
-                <h3 class="font-bold text-on-surface text-base mb-1">No dishes match your radar criteria</h3>
-                <p class="text-xs text-on-surface-variant max-w-sm mb-4">Try widening your distance filter to 1km or 3km to discover more nearby home cooks.</p>
+          <!-- Food Feed Container (Full width responsive grid) -->
+          <div class="px-4 sm:px-container-margin pb-section-gap pt-3 flex-1">
+            <!-- Distance, Diet & Map Quick Jump Filter Bar -->
+            <div class="flex items-center justify-between gap-3 mb-6 overflow-x-auto pb-2 hide-scrollbar sticky top-16 lg:top-20 bg-background/95 backdrop-blur-md z-20 pt-2 border-b border-outline-variant/10">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-on-surface-variant mr-1">Radius:</span>
                 <button
-                  @click="selectedDistance = '3km'; activeFilter = 'all'; searchQuery = ''"
-                  class="px-4 py-2 bg-primary text-on-primary rounded-xl text-xs font-bold shadow-sm"
+                  @click="selectedDistance = '500m'"
+                  :class="selectedDistance === '500m' ? 'border-primary text-primary bg-primary/10 font-bold' : 'border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high'"
+                  class="whitespace-nowrap px-3 py-1.5 rounded-full border text-xs transition-all cursor-pointer"
                 >
-                  Expand Radar Radius
+                  500m
+                </button>
+                <button
+                  @click="selectedDistance = '1km'"
+                  :class="selectedDistance === '1km' ? 'border-primary text-primary bg-primary/10 font-bold' : 'border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high'"
+                  class="whitespace-nowrap px-3 py-1.5 rounded-full border text-xs transition-all cursor-pointer"
+                >
+                  1 km
+                </button>
+                <button
+                  @click="selectedDistance = '3km'"
+                  :class="selectedDistance === '3km' ? 'border-primary text-primary bg-primary/10 font-bold' : 'border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high'"
+                  class="whitespace-nowrap px-3 py-1.5 rounded-full border text-xs transition-all cursor-pointer"
+                >
+                  3 km
                 </button>
               </div>
 
-              <!-- Feed Grid (Responsive 1-col on mobile, 2-col on tablet/desktop) -->
-              <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-stack-md">
-                <div
-                  v-for="item in filteredFoods"
-                  :key="item._id || item.id"
-                  @click="openFoodDetail(item)"
-                  class="group flex flex-col bg-surface-container-lowest rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 cursor-pointer border border-outline-variant/20 active:scale-[0.99]"
+              <div class="flex items-center gap-2">
+                <button
+                  @click="selectedDiet = selectedDiet === 'veg' ? 'all' : 'veg'"
+                  :class="selectedDiet === 'veg' ? 'bg-green-600 text-white font-bold' : 'bg-surface-container text-on-surface-variant'"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer"
                 >
-                  <!-- Dish Photo -->
-                  <div class="relative w-full aspect-[16/10] sm:aspect-[4/3] overflow-hidden bg-surface-container">
-                    <img
-                      :src="item.image"
-                      :alt="item.name"
-                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      loading="lazy"
-                    />
-                    <!-- Live Portions Badge -->
-                    <div
-                      :class="item.quantity <= 2 ? 'bg-red-600 text-white' : 'bg-surface/95 backdrop-blur-sm text-on-surface'"
-                      class="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm text-[11px] font-bold"
-                    >
-                      <span :class="item.quantity <= 2 ? 'bg-white' : 'bg-primary'" class="w-2 h-2 rounded-full animate-ping"></span>
-                      <span>{{ item.quantity }} left</span>
-                    </div>
+                  <span class="w-2 h-2 rounded-full border border-current"></span>
+                  <span>Veg only</span>
+                </button>
 
-                    <!-- Price Tag -->
-                    <div class="absolute bottom-2.5 right-2.5 bg-surface/95 backdrop-blur-md px-3 py-1 rounded-xl shadow-md flex items-center gap-0.5">
-                      <span class="text-sm font-bold text-primary">₹{{ item.price }}</span>
-                    </div>
-                  </div>
-
-                  <!-- Details -->
-                  <div class="p-3 sm:p-3.5 flex flex-col gap-2 flex-1">
-                    <div>
-                      <h3 class="font-bold text-on-surface group-hover:text-primary transition-colors text-sm line-clamp-1">{{ item.name }}</h3>
-                      <p class="text-xs text-on-surface-variant line-clamp-2 mt-0.5">{{ item.description }}</p>
-                    </div>
-
-                    <div class="flex items-center gap-2 text-xs text-on-surface-variant font-medium">
-                      <span class="material-symbols-outlined text-[16px] text-primary">soup_kitchen</span>
-                      <span class="truncate font-semibold text-on-surface">{{ item.vendorName }}</span>
-                    </div>
-
-                    <!-- Micro-bar attributes -->
-                    <div class="mt-auto pt-2 flex items-center justify-between border-t border-outline-variant/10 text-xs">
-                      <span
-                        :class="countdown(item).isReady ? 'text-green-700 bg-green-50' : 'text-amber-800 bg-amber-50 font-mono'"
-                        class="inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-md"
-                      >
-                        <span class="material-symbols-outlined text-[14px]" :class="countdown(item).isReady ? '' : 'animate-pulse text-amber-600'">schedule</span>
-                        {{ countdown(item).text }}
-                      </span>
-
-                      <span class="inline-flex items-center gap-1 text-on-surface-variant font-semibold">
-                        <span class="material-symbols-outlined text-[14px]">directions_walk</span>
-                        {{ item.calculatedDistance }}m
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                <button
+                  @click="navigateTo('explore_radar')"
+                  class="flex items-center gap-1.5 px-3.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-full text-xs font-bold transition-all cursor-pointer border border-primary/20"
+                >
+                  <span class="material-symbols-outlined text-[16px]">map</span>
+                  <span class="hidden xs:inline">Open Radar Map</span>
+                </button>
               </div>
             </div>
 
-            <!-- RIGHT: Interactive Live Map Radar (Full height on mobile if toggled, side-by-side on desktop) -->
-            <div
-              :class="mobileViewMode === 'map' ? 'flex h-[calc(100vh-140px)]' : 'hidden lg:flex lg:w-[45%] xl:w-[48%] h-[calc(100vh-190px)] sticky top-[95px]'"
-              class="w-full relative pb-2"
-            >
-              <LeafletRadar
-                :userCoords="userCoords"
-                :foods="filteredFoods"
-                :radius="selectedDistance"
-                @select-food="openFoodDetail"
-                @update-location="(coords) => liveCoords = coords"
-              />
+            <!-- Loading State -->
+            <div v-if="isLoading" class="py-20 flex flex-col items-center justify-center gap-3 text-on-surface-variant">
+              <div class="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
+              <span class="text-xs font-semibold">Scanning live neighborhood kitchens...</span>
+            </div>
 
+            <!-- Empty State -->
+            <div v-else-if="filteredFoods.length === 0" class="py-16 flex flex-col items-center justify-center text-center p-8 bg-surface-container-low rounded-3xl border border-outline-variant/20 max-w-lg mx-auto">
+              <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary mb-4">
+                <span class="material-symbols-outlined text-[32px]">search_off</span>
+              </div>
+              <h3 class="font-bold text-on-surface text-lg mb-1">No dishes match your radar criteria</h3>
+              <p class="text-xs text-on-surface-variant max-w-sm mb-5 leading-relaxed">Try widening your distance filter to 1km or 3km to discover more nearby home cooks.</p>
+              <button
+                @click="selectedDistance = '3km'; activeFilter = 'all'; searchQuery = ''"
+                class="px-5 py-2.5 bg-primary text-on-primary rounded-xl text-xs font-bold shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
+              >
+                Expand Radar Radius
+              </button>
+            </div>
+
+            <!-- Food Grid (1 col on mobile, 2 on tablet, 3 on desktop, 4 on large screens) -->
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+              <ResidentFoodCard
+                v-for="item in filteredFoods"
+                :key="item._id || item.id"
+                :item="item"
+                @select="openFoodDetail"
+              />
             </div>
           </div>
         </div>
@@ -782,15 +563,15 @@ function toggleRole() {
         @click="navigateTo('food_radar')"
         class="flex flex-col items-center justify-center flex-1 py-1 text-primary"
       >
-        <span class="material-symbols-outlined text-[22px]">explore</span>
-        <span class="text-[10px] font-bold mt-0.5">Radar</span>
+        <span class="material-symbols-outlined text-[22px]">home</span>
+        <span class="text-[10px] font-bold mt-0.5">Home</span>
       </button>
       <button
-        @click="mobileViewMode = mobileViewMode === 'map' ? 'feed' : 'map'"
+        @click="navigateTo('explore_radar')"
         class="flex flex-col items-center justify-center flex-1 py-1 text-on-surface-variant hover:text-primary"
       >
-        <span class="material-symbols-outlined text-[22px]">{{ mobileViewMode === 'map' ? 'grid_view' : 'map' }}</span>
-        <span class="text-[10px] font-semibold mt-0.5">{{ mobileViewMode === 'map' ? 'Feed' : 'Map' }}</span>
+        <span class="material-symbols-outlined text-[22px]">explore</span>
+        <span class="text-[10px] font-semibold mt-0.5">Explore</span>
       </button>
       <button
         v-if="props.user && props.currentRole !== 'guest'"
@@ -883,4 +664,3 @@ function toggleRole() {
   opacity: 0;
 }
 </style>
-

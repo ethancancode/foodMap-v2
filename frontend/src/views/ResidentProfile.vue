@@ -1,5 +1,7 @@
 <script setup>
 import { ref } from 'vue'
+import AppSidebar from '../components/AppSidebar.vue'
+import AppHeader from '../components/AppHeader.vue'
 
 const props = defineProps({
   user: Object,
@@ -24,101 +26,32 @@ function handleLogout() {
 
 <template>
   <div class="component-root w-full min-h-screen bg-background text-on-surface pb-20 lg:pb-0">
-    <!-- Mobile Backdrop -->
-    <div
-      v-if="isMobileSidebarOpen"
-      @click="isMobileSidebarOpen = false"
-      class="lg:hidden fixed inset-0 bg-black/50 z-50 transition-opacity backdrop-blur-xs"
-    ></div>
-
-    <!-- Slide-in Sidebar (Desktop permanent, Mobile sliding drawer) -->
-    <aside
-      :class="[
-        'fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.06)] transition-transform duration-300 ease-in-out',
-        isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      ]"
-    >
-      <div class="p-stack-lg flex items-center justify-between gap-base">
-        <button @click="navigateTo('food_radar')" class="flex items-center gap-base text-left cursor-pointer">
-          <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md">
-            <span class="material-symbols-outlined text-on-primary">map</span>
-          </div>
-          <span class="font-headline-lg text-title-md tracking-tight text-primary font-bold">FoodMap</span>
-        </button>
-        <button
-          @click="isMobileSidebarOpen = false"
-          class="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high"
-        >
-          <span class="material-symbols-outlined text-[20px]">close</span>
-        </button>
-      </div>
-
-      <nav class="flex-1 px-base space-y-stack-sm mt-2">
-        <button
-          @click="navigateTo('food_radar')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
-        >
-          <span class="material-symbols-outlined mr-gutter">home</span>
-          <span class="font-label-md">Home</span>
-        </button>
-        <button
-          @click="navigateTo('food_radar')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
-        >
-          <span class="material-symbols-outlined mr-gutter">explore</span>
-          <span class="font-label-md">Explore Radar</span>
-        </button>
-        <button
-          @click="navigateTo('order_status')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
-        >
-          <span class="material-symbols-outlined mr-gutter">receipt_long</span>
-          <span class="font-label-md">Orders</span>
-        </button>
-        <button
-          @click="navigateTo('resident_profile')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg transition-all bg-primary text-on-primary font-bold shadow-sm cursor-pointer"
-        >
-          <span class="material-symbols-outlined mr-gutter">person</span>
-          <span class="font-label-md">Profile</span>
-        </button>
-      </nav>
-
-      <div class="px-base py-stack-lg border-t border-outline-variant/20 space-y-stack-sm">
-        <button
-          @click="handleLogout"
-          class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-outline-variant/30 text-on-surface-variant hover:text-red-600 hover:bg-red-50 text-xs font-semibold transition-colors cursor-pointer"
-        >
-          <span class="material-symbols-outlined text-[16px]">logout</span>
-          <span>Log Out / Switch Account</span>
-        </button>
-      </div>
-    </aside>
+    <!-- Reusable AppSidebar -->
+    <AppSidebar
+      :is-open="isMobileSidebarOpen"
+      :role="props.currentRole || 'resident'"
+      activeRoute="resident_profile"
+      :user="props.user"
+      @close="isMobileSidebarOpen = false"
+      @navigate="navigateTo"
+      @logout="handleLogout"
+    />
 
     <!-- Main Content Area -->
     <div class="pl-0 lg:pl-72">
-      <!-- Header -->
-      <header class="fixed top-0 left-0 lg:left-72 right-0 h-16 lg:h-20 bg-surface/90 backdrop-blur-md z-40 flex items-center px-3 sm:px-container-margin justify-between border-b border-outline-variant/20 gap-2">
-        <div class="flex items-center gap-2 sm:gap-4">
-          <button
-            @click="isMobileSidebarOpen = true"
-            class="lg:hidden p-2 rounded-xl bg-surface-container text-on-surface hover:text-primary transition-colors cursor-pointer"
-            aria-label="Toggle navigation drawer"
-          >
-            <span class="material-symbols-outlined text-[20px]">menu</span>
-          </button>
-          <button
-            @click="navigateTo('food_radar')"
-            class="flex items-center gap-1.5 text-on-surface hover:text-primary transition-colors bg-surface-container px-3 py-1.5 sm:px-4 sm:py-2 rounded-full font-label-md font-semibold text-xs cursor-pointer shadow-sm"
-          >
-            <span class="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span>Radar</span>
-          </button>
-        </div>
-        <div class="flex items-center gap-2">
+      <!-- Unified Header -->
+      <AppHeader
+        :show-back="true"
+        back-label="Radar"
+        back-route="food_radar"
+        :show-sync-badge="false"
+        @toggle-sidebar="isMobileSidebarOpen = true"
+        @navigate="navigateTo"
+      >
+        <template #actions>
           <span class="text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-full">Resident Account</span>
-        </div>
-      </header>
+        </template>
+      </AppHeader>
 
       <main class="relative pt-16 lg:pt-20 min-h-screen bg-background">
         <div class="max-w-4xl mx-auto px-4 sm:px-container-margin py-4 sm:py-stack-lg flex flex-col gap-4 sm:gap-section-gap">

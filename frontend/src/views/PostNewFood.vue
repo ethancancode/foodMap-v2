@@ -1,7 +1,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { foodApi, vendorApi } from '../services/api.js'
-import LocationPickerModal from './LocationPickerModal.vue'
+import LocationPickerModal from '../components/LocationPickerModal.vue'
+import AppSidebar from '../components/AppSidebar.vue'
+import AppHeader from '../components/AppHeader.vue'
 
 const props = defineProps({
   user: Object,
@@ -20,6 +22,7 @@ const readyTime = ref('Now')
 const customHours = ref('')
 const customMinutes = ref('')
 const itemCategory = ref('Main Course')
+const isVeg = ref(true)
 const itemDesc = ref('')
 const itemImage = ref('')
 const isPosting = ref(false)
@@ -230,6 +233,8 @@ async function handlePost() {
       initialQuantity: Number(itemQty.value),
       available: true,
       isAvailable: true,
+      isVeg: Boolean(isVeg.value),
+      diet: isVeg.value ? 'veg' : 'non-veg',
       cookingStatus: effectiveStatus,
       timeReady: effectiveStatus,
       readyAt: readyAt ? readyAt.toISOString() : null,
@@ -281,92 +286,35 @@ async function handlePost() {
 
 <template>
   <div class="component-root w-full min-h-screen bg-background text-on-surface pb-20 lg:pb-0">
-    <!-- Left Navigation Sidebar (Desktop only) -->
-    <aside class="hidden lg:flex fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-      <div class="p-stack-lg flex items-center gap-base">
-        <button @click="navigateTo('vendor_dashboard')" class="flex items-center gap-base text-left cursor-pointer">
-          <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md">
-            <span class="material-symbols-outlined text-on-primary">soup_kitchen</span>
-          </div>
-          <div class="flex flex-col">
-            <span class="font-headline-lg text-title-md tracking-tight text-primary font-bold">FoodMap</span>
-            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider font-semibold">Vendor Portal</span>
-          </div>
-        </button>
-      </div>
-
-      <nav class="flex-1 px-base space-y-stack-sm mt-2">
-        <button
-          @click="navigateTo('vendor_dashboard')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
-        >
-          <span class="material-symbols-outlined mr-gutter">dashboard</span>
-          <span class="font-label-md">Kitchen Hub</span>
-        </button>
-        <button
-          @click="navigateTo('post_new_food')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg transition-all bg-primary text-on-primary font-bold shadow-sm cursor-pointer"
-        >
-          <span class="material-symbols-outlined mr-gutter">add_circle</span>
-          <span class="font-label-md">Post New Food</span>
-        </button>
-        <button
-          @click="navigateTo('new_order')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
-        >
-          <span class="material-symbols-outlined mr-gutter">notifications_active</span>
-          <span class="font-label-md">Incoming Orders</span>
-        </button>
-        <button
-          @click="navigateTo('vendor_profile')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
-        >
-          <span class="material-symbols-outlined mr-gutter">storefront</span>
-          <span class="font-label-md">Kitchen Profile</span>
-        </button>
-      </nav>
-
-      <div class="px-base py-stack-lg border-t border-outline-variant/20 space-y-stack-sm">
-        <button
-          @click="navigateTo('vendor_profile')"
-          class="w-full flex items-center gap-gutter px-gutter py-stack-md rounded-xl bg-surface-container-lowest border border-outline-variant/20 hover:border-primary/40 transition-colors text-left cursor-pointer"
-        >
-          <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-            {{ (vendorProfile?.businessName || props.user?.vendor?.businessName || props.user?.name || 'P').charAt(0).toUpperCase() }}
-          </div>
-          <div class="flex flex-col min-w-0">
-            <span class="font-label-md text-on-surface leading-normal text-xs font-bold truncate">{{ vendorProfile?.businessName || props.user?.vendor?.businessName || props.user?.name || "Priya Kitchen" }}</span>
-          </div>
-        </button>
-
-        <button
-          @click="navigateTo('welcome')"
-          class="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-on-surface-variant hover:text-on-surface hover:bg-surface-container text-xs font-medium transition-colors cursor-pointer"
-        >
-          <span class="material-symbols-outlined text-[16px]">logout</span>
-          <span>Sign Out</span>
-        </button>
-      </div>
-    </aside>
+    <!-- Unified Vendor Sidebar -->
+    <AppSidebar
+      :is-open="false"
+      role="vendor"
+      active-route="post_new_food"
+      :user="props.user"
+      :vendor-profile="vendorProfile"
+      @navigate="navigateTo"
+      @logout="navigateTo('welcome')"
+    />
 
     <!-- Content Area -->
     <div class="pl-0 lg:pl-72">
-      <!-- Header -->
-      <header class="fixed top-0 left-0 lg:left-72 right-0 h-16 lg:h-20 bg-surface/90 backdrop-blur-md z-40 flex items-center px-3 sm:px-container-margin justify-between border-b border-outline-variant/20 gap-2">
-        <div class="flex items-center gap-2 sm:gap-4">
-          <button
-            @click="navigateTo('vendor_dashboard')"
-            class="flex items-center gap-1.5 text-on-surface hover:text-primary transition-colors bg-surface-container px-3 py-1.5 sm:px-4 sm:py-2 rounded-full font-label-md font-semibold text-xs cursor-pointer shadow-sm"
-          >
-            <span class="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span>Kitchen</span>
-          </button>
-        </div>
-        <div class="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full">
-          <span class="material-symbols-outlined text-[15px]">broadcast_on_home</span>
-          <span>Live Radar</span>
-        </div>
-      </header>
+      <!-- Unified Header -->
+      <AppHeader
+        :show-back="true"
+        back-label="Kitchen"
+        back-route="vendor_dashboard"
+        :show-sync-badge="false"
+        @toggle-sidebar="isMobileSidebarOpen = true"
+        @navigate="navigateTo"
+      >
+        <template #actions>
+          <div class="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full">
+            <span class="material-symbols-outlined text-[15px]">broadcast_on_home</span>
+            <span>Live Radar</span>
+          </div>
+        </template>
+      </AppHeader>
 
       <main class="relative pt-16 lg:pt-20 min-h-screen bg-background">
         <div class="flex flex-col w-full h-full max-w-2xl mx-auto px-4 sm:px-container-margin py-4 sm:py-6 pb-section-gap">
@@ -478,6 +426,40 @@ async function handlePost() {
                   id="item-desc"
                   placeholder="Homestyle spices, fresh ingredients..."
                 ></textarea>
+              </div>
+
+              <!-- Dietary Preference (Veg / Non-Veg) -->
+              <div class="flex flex-col">
+                <label class="text-xs font-bold text-on-surface mb-1.5 uppercase tracking-wider block">
+                  Food Type / Dietary
+                </label>
+                <div class="grid grid-cols-2 gap-2.5">
+                  <!-- Vegetarian Option -->
+                  <button
+                    type="button"
+                    @click="isVeg = true"
+                    :class="isVeg ? 'bg-green-500/10 border-green-600 text-green-800 ring-2 ring-green-600/20 font-bold shadow-xs' : 'bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container font-medium'"
+                    class="flex items-center justify-center gap-2.5 py-2.5 px-3 rounded-xl border transition-all cursor-pointer"
+                  >
+                    <span class="w-4 h-4 rounded-xs border-2 border-green-600 flex items-center justify-center p-0.5 shrink-0">
+                      <span class="w-2 h-2 rounded-full bg-green-600"></span>
+                    </span>
+                    <span class="text-xs sm:text-sm">Pure Veg</span>
+                  </button>
+
+                  <!-- Non-Vegetarian Option -->
+                  <button
+                    type="button"
+                    @click="isVeg = false"
+                    :class="!isVeg ? 'bg-red-500/10 border-red-600 text-red-800 ring-2 ring-red-600/20 font-bold shadow-xs' : 'bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container font-medium'"
+                    class="flex items-center justify-center gap-2.5 py-2.5 px-3 rounded-xl border transition-all cursor-pointer"
+                  >
+                    <span class="w-4 h-4 rounded-xs border-2 border-red-600 flex items-center justify-center p-0.5 shrink-0">
+                      <span class="w-2 h-2 rounded-full bg-red-600"></span>
+                    </span>
+                    <span class="text-xs sm:text-sm">Non-Veg</span>
+                  </button>
+                </div>
               </div>
 
               <div class="grid grid-cols-2 gap-3">

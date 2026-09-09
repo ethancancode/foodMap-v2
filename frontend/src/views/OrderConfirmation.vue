@@ -1,5 +1,7 @@
 <script setup>
 import { computed } from 'vue'
+import AppSidebar from '../components/AppSidebar.vue'
+import AppHeader from '../components/AppHeader.vue'
 
 const props = defineProps({
   order: Object,
@@ -31,71 +33,26 @@ function navigateTo(route, payload = null) {
 
 <template>
   <div class="component-root w-full min-h-screen bg-background text-on-surface">
-    <!-- Left Navigation Sidebar -->
-    <aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-      <div class="p-stack-lg flex items-center gap-base">
-        <button @click="navigateTo('food_radar')" class="flex items-center gap-base text-left">
-          <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-            <span class="material-symbols-outlined text-on-primary">map</span>
-          </div>
-          <span class="font-headline-lg text-title-md tracking-tight text-primary">FoodMap</span>
-        </button>
-      </div>
-
-      <nav class="flex-1 px-base space-y-stack-sm">
-        <button
-          @click="navigateTo('food_radar')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all"
-        >
-          <span class="material-symbols-outlined mr-gutter">home</span>
-          <span class="font-label-md">Home</span>
-        </button>
-        <button
-          @click="navigateTo('food_radar')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all"
-        >
-          <span class="material-symbols-outlined mr-gutter">explore</span>
-          <span class="font-label-md">Explore</span>
-        </button>
-        <button
-          @click="navigateTo('order_status')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg transition-all bg-primary-container text-on-primary-container font-bold"
-        >
-          <span class="material-symbols-outlined mr-gutter">receipt_long</span>
-          <span class="font-label-md">Orders</span>
-        </button>
-        <button
-          @click="navigateTo('resident_profile')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all"
-        >
-          <span class="material-symbols-outlined mr-gutter">person</span>
-          <span class="font-label-md">Profile</span>
-        </button>
-      </nav>
-
-      <div class="px-base py-stack-lg border-t border-outline-variant/20 space-y-stack-sm">
-        <button
-          @click="navigateTo('resident_profile')"
-          class="w-full flex items-center gap-gutter px-gutter py-stack-md rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors text-left"
-        >
-          <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-            <span class="material-symbols-outlined text-on-primary text-[18px]">person</span>
-          </div>
-          <div class="flex flex-col">
-            <span class="font-label-md text-on-surface leading-none">{{ props.user?.name || 'Nikhil' }}</span>
-            <span class="text-[10px] text-on-surface-variant uppercase tracking-wider">Resident</span>
-          </div>
-        </button>
-      </div>
-    </aside>
+    <!-- Reusable AppSidebar -->
+    <AppSidebar
+      :role="props.currentRole || (props.user ? 'resident' : 'guest')"
+      activeRoute="order_status"
+      :user="props.user"
+      @navigate="navigateTo"
+      @logout="navigateTo('welcome')"
+    />
 
     <!-- Content Area -->
-    <div class="pl-72">
-      <header class="fixed top-0 left-72 right-0 h-20 bg-surface/90 backdrop-blur-md z-40 flex items-center px-container-margin justify-between border-b border-outline-variant/20">
-        <div class="flex items-center gap-2">
-          <span class="font-title-md font-bold text-on-surface">Order Success</span>
-        </div>
-      </header>
+    <div class="lg:pl-72">
+      <!-- Unified Header -->
+      <AppHeader
+        title="Order Success"
+        :show-back="true"
+        back-label="Back to Radar"
+        back-route="food_radar"
+        :show-sync-badge="false"
+        @navigate="navigateTo"
+      />
 
       <main class="relative pt-20 min-h-screen bg-background flex items-center justify-center p-container-margin">
         <div class="flex flex-col w-full max-w-lg items-center text-center p-8 bg-surface-container-low rounded-2xl shadow-md border border-outline-variant/20 relative overflow-hidden">

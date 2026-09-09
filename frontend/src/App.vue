@@ -6,25 +6,24 @@ import { useOrderStore } from './stores/orderStore.js'
 import { useVendorStore } from './stores/vendorStore.js'
 import { getSocket } from './services/socket.js'
 
-// Import all FoodMap screen components
-import Welcome_to_FoodMap from './components/Welcome_to_FoodMap.vue'
-import FoodRadar from './components/FoodRadar.vue'
-import FoodDetails from './components/FoodDetails.vue'
-import Checkout from './components/Checkout.vue'
-import OrderConfirmation from './components/OrderConfirmation.vue'
-import OrderStatus from './components/OrderStatus.vue'
-import OrderPickup from './components/OrderPickup.vue'
-import OrderCompleted from './components/OrderCompleted.vue'
-import ResidentProfile from './components/ResidentProfile.vue'
-import VendorDashboard from './components/VendorDashboard.vue'
-import PostNewFood from './components/PostNewFood.vue'
-import YouAreLive from './components/YouAreLive.vue'
-import NewOrder from './components/NewOrder.vue'
-import VendorOrderConfirmed from './components/VendorOrderConfirmed.vue'
-import VendorProfile from './components/VendorProfile.vue'
-import EditVendorProfile from './components/EditVendorProfile.vue'
-import RoleSelection from './components/RoleSelection.vue'
-import OTPVerification from './components/OTPVerification.vue'
+// Import all FoodMap view screen components
+import Welcome_to_FoodMap from './views/Welcome_to_FoodMap.vue'
+import FoodRadar from './views/FoodRadar.vue'
+import ExploreRadar from './views/ExploreRadar.vue'
+import FoodDetails from './views/FoodDetails.vue'
+import Checkout from './views/Checkout.vue'
+import OrderConfirmation from './views/OrderConfirmation.vue'
+import OrderStatus from './views/OrderStatus.vue'
+import OrderPickup from './views/OrderPickup.vue'
+import OrderCompleted from './views/OrderCompleted.vue'
+import ResidentProfile from './views/ResidentProfile.vue'
+import VendorDashboard from './views/VendorDashboard.vue'
+import PostNewFood from './views/PostNewFood.vue'
+import YouAreLive from './views/YouAreLive.vue'
+import NewOrder from './views/NewOrder.vue'
+import VendorOrderConfirmed from './views/VendorOrderConfirmed.vue'
+import VendorProfile from './views/VendorProfile.vue'
+import EditVendorProfile from './views/EditVendorProfile.vue'
 
 import { useRouter, useRoute } from 'vue-router'
 
@@ -40,6 +39,7 @@ const vendorStore = useVendorStore()
 const screenToPath = {
   welcome: '/',
   food_radar: '/radar',
+  explore_radar: '/explore-radar',
   food_details: '/food-details',
   checkout: '/checkout',
   order_confirmation: '/order-confirmation',
@@ -54,8 +54,6 @@ const screenToPath = {
   vendor_order_confirmed: '/vendor-order-confirmed',
   vendor_profile: '/vendor-profile',
   edit_vendor_profile: '/edit-vendor-profile',
-  role_selection: '/role-selection',
-  otp_verification: '/otp',
 }
 
 const pathToScreen = Object.fromEntries(
@@ -67,6 +65,7 @@ pathToScreen['/welcome'] = 'welcome'
 const screenComponents = {
   welcome: Welcome_to_FoodMap,
   food_radar: FoodRadar,
+  explore_radar: ExploreRadar,
   food_details: FoodDetails,
   checkout: Checkout,
   order_confirmation: OrderConfirmation,
@@ -81,8 +80,6 @@ const screenComponents = {
   vendor_order_confirmed: VendorOrderConfirmed,
   vendor_profile: VendorProfile,
   edit_vendor_profile: EditVendorProfile,
-  role_selection: RoleSelection,
-  otp_verification: OTPVerification,
 }
 
 // Drive active screen directly from current URL path
@@ -123,7 +120,9 @@ function navigateTo(target, payload = null) {
   }
 
   // Handle aliases & actions
-  if (targetId === 'home' || targetId === 'explore' || targetId === 'food_radar') {
+  if (targetId === 'explore_radar' || targetId === 'explore-radar' || targetId === 'explore') {
+    targetId = 'explore_radar'
+  } else if (targetId === 'home' || targetId === 'food_radar') {
     targetId = currentRole.value === 'vendor' ? 'vendor_dashboard' : 'food_radar'
   } else if (targetId === 'dashboard' || targetId === 'vendor_home' || targetId === 'listings') {
     targetId = 'vendor_dashboard'

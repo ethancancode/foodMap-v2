@@ -1,7 +1,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { vendorApi } from '../services/api.js'
-import LocationPickerModal from './LocationPickerModal.vue'
+import LocationPickerModal from '../components/LocationPickerModal.vue'
+import AppSidebar from '../components/AppSidebar.vue'
+import AppHeader from '../components/AppHeader.vue'
 
 const props = defineProps({
   user: Object,
@@ -107,91 +109,26 @@ async function handleSave() {
 
 <template>
   <div class="component-root w-full min-h-screen bg-background text-on-surface">
-    <!-- Left Navigation Sidebar -->
-    <aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-      <div class="p-stack-lg flex items-center gap-base">
-        <button @click="navigateTo('vendor_dashboard')" class="flex items-center gap-base text-left">
-          <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-            <span class="material-symbols-outlined text-on-primary">soup_kitchen</span>
-          </div>
-          <span class="font-headline-lg text-title-md tracking-tight text-primary">FoodMap</span>
-        </button>
-      </div>
-
-      <nav class="flex-1 px-base space-y-stack-sm mt-2">
-        <button
-          @click="navigateTo('vendor_dashboard')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
-        >
-          <span class="material-symbols-outlined mr-gutter">dashboard</span>
-          <span class="font-label-md">Kitchen Hub</span>
-        </button>
-        <button
-          @click="navigateTo('post_new_food')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
-        >
-          <span class="material-symbols-outlined mr-gutter">add_circle</span>
-          <span class="font-label-md">Post New Food</span>
-        </button>
-        <button
-          @click="navigateTo('new_order')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer font-medium"
-        >
-          <span class="material-symbols-outlined mr-gutter">notifications_active</span>
-          <span class="font-label-md">Active Orders</span>
-        </button>
-        <button
-          @click="navigateTo('vendor_profile')"
-          class="w-full flex items-center px-gutter py-stack-md rounded-lg transition-all bg-primary text-on-primary font-bold shadow-sm cursor-pointer"
-        >
-          <span class="material-symbols-outlined mr-gutter">storefront</span>
-          <span class="font-label-md">Kitchen Profile</span>
-        </button>
-      </nav>
-
-      <div class="px-base py-stack-lg border-t border-outline-variant/20 space-y-stack-sm">
-        <button
-          @click="navigateTo('vendor_profile')"
-          class="w-full flex items-center gap-gutter px-gutter py-stack-md rounded-xl bg-surface-container-lowest border border-outline-variant/20 hover:border-primary/40 transition-colors text-left cursor-pointer"
-        >
-          <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-            {{ (kitchenName || props.user?.vendor?.businessName || props.user?.name || 'P').charAt(0).toUpperCase() }}
-          </div>
-          <div class="flex flex-col min-w-0">
-            <span class="font-label-md text-on-surface leading-normal text-xs font-bold truncate">{{ kitchenName || props.user?.vendor?.businessName || props.user?.name || "Priya Kitchen" }}</span>
-          </div>
-        </button>
-
-        <button
-          @click="navigateTo('welcome')"
-          class="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-on-surface-variant hover:text-on-surface hover:bg-surface-container text-xs font-medium transition-colors cursor-pointer"
-        >
-          <span class="material-symbols-outlined text-[16px]">logout</span>
-          <span>Sign Out</span>
-        </button>
-      </div>
-    </aside>
+    <!-- Unified Vendor Sidebar -->
+    <AppSidebar
+      :is-open="false"
+      role="vendor"
+      active-route="vendor_profile"
+      :user="props.user"
+      @navigate="navigateTo"
+      @logout="navigateTo('welcome')"
+    />
 
     <!-- Main Content Area -->
-    <div class="pl-72">
-      <!-- Header -->
-      <header class="fixed top-0 left-72 right-0 h-20 bg-surface/90 backdrop-blur-md z-40 flex items-center px-container-margin justify-between border-b border-outline-variant/20">
-        <div class="flex items-center gap-4">
-          <button
-            @click="navigateTo('vendor_profile')"
-            class="flex items-center gap-2 text-on-surface hover:text-primary transition-colors bg-surface-container-high/60 hover:bg-surface-container-high px-4 py-2 rounded-full font-label-md font-semibold"
-          >
-            <span class="material-symbols-outlined text-[20px]">arrow_back</span>
-            <span>Back to Profile</span>
-          </button>
-        </div>
-        <button
-          @click="handleSave"
-          class="px-5 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 transition-all shadow-sm"
-        >
-          Save Changes
-        </button>
-      </header>
+    <div class="lg:pl-72">
+      <!-- Unified Header -->
+      <AppHeader
+        :show-back="true"
+        back-label="Back to Profile"
+        back-route="vendor_profile"
+        :show-sync-badge="false"
+        @navigate="navigateTo"
+      />
 
       <main class="relative pt-20 min-h-screen bg-background">
         <div class="px-container-margin py-stack-lg max-w-4xl mx-auto w-full">

@@ -9,6 +9,15 @@ export const useOrderStore = defineStore('order', {
     initialized: false,
   }),
 
+  getters: {
+    pendingOrdersCount: (state) => {
+      const ACTIVE_STATUSES = ['pending', 'placed', 'accepted', 'preparing', 'ready_for_pickup'];
+      return (state.orders || []).filter((o) =>
+        ACTIVE_STATUSES.includes((o.status || '').toLowerCase())
+      ).length;
+    },
+  },
+
   actions: {
     async placeOrder(orderPayload) {
       try {

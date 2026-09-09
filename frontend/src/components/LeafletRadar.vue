@@ -200,13 +200,13 @@ onMounted(() => {
     center: [centerLat, centerLng],
     zoom: 16,
     zoomSnap: 0.25,
-    zoomControl: true
+    zoomControl: true,
+    attributionControl: false
   });
 
-  // OpenStreetMap free tile layer
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
+  // Esri World Street Map (Clean roads, highways, railways, transit hubs with 0 religious symbols, 0 watermarks, 100% free)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19
   }).addTo(map);
 
   foodLayerGroup = L.layerGroup().addTo(map);
@@ -408,6 +408,11 @@ onUnmounted(() => {
     transform: scale(2.2);
     opacity: 0;
   }
+}
+
+/* Clean modern map rendering */
+.leaflet-container .leaflet-tile {
+  filter: saturate(0.85) contrast(1.05) brightness(1.02);
 }
 
 /* Prevent any square focus outline around the SVG circle path or map container */

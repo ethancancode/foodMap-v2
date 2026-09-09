@@ -1,30 +1,27 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
-// Lazy load or component map
-import Welcome_to_FoodMap from '../components/Welcome_to_FoodMap.vue';
-import FoodRadar from '../components/FoodRadar.vue';
-import FoodDetails from '../components/FoodDetails.vue';
-import Checkout from '../components/Checkout.vue';
-import OrderConfirmation from '../components/OrderConfirmation.vue';
-import OrderStatus from '../components/OrderStatus.vue';
-import OrderPickup from '../components/OrderPickup.vue';
-import OrderCompleted from '../components/OrderCompleted.vue';
-import ResidentProfile from '../components/ResidentProfile.vue';
-import VendorDashboard from '../components/VendorDashboard.vue';
-import PostNewFood from '../components/PostNewFood.vue';
-import YouAreLive from '../components/YouAreLive.vue';
-import NewOrder from '../components/NewOrder.vue';
-import VendorOrderConfirmed from '../components/VendorOrderConfirmed.vue';
-import VendorProfile from '../components/VendorProfile.vue';
-import EditVendorProfile from '../components/EditVendorProfile.vue';
-import RoleSelection from '../components/RoleSelection.vue';
-import OTPVerification from '../components/OTPVerification.vue';
-
+// Views / Pages
+import Welcome_to_FoodMap from '../views/Welcome_to_FoodMap.vue';
+import FoodRadar from '../views/FoodRadar.vue';
+import FoodDetails from '../views/FoodDetails.vue';
+import Checkout from '../views/Checkout.vue';
+import OrderConfirmation from '../views/OrderConfirmation.vue';
+import OrderStatus from '../views/OrderStatus.vue';
+import OrderPickup from '../views/OrderPickup.vue';
+import OrderCompleted from '../views/OrderCompleted.vue';
+import ResidentProfile from '../views/ResidentProfile.vue';
+import VendorDashboard from '../views/VendorDashboard.vue';
+import PostNewFood from '../views/PostNewFood.vue';
+import YouAreLive from '../views/YouAreLive.vue';
+import NewOrder from '../views/NewOrder.vue';
+import VendorOrderConfirmed from '../views/VendorOrderConfirmed.vue';
+import VendorProfile from '../views/VendorProfile.vue';
+import EditVendorProfile from '../views/EditVendorProfile.vue';
 const routes = [
   { path: '/', name: 'welcome', component: Welcome_to_FoodMap },
   { path: '/welcome', name: 'welcome-page', component: Welcome_to_FoodMap },
-  { path: '/otp', name: 'otp', component: OTPVerification },
-  { path: '/role-selection', name: 'role-selection', component: RoleSelection },
+  { path: '/otp', redirect: '/' },
+  { path: '/role-selection', redirect: '/' },
   { path: '/radar', name: 'food-radar', component: FoodRadar },
   { path: '/food-details', name: 'food-details', component: FoodDetails },
   { path: '/checkout', name: 'checkout', component: Checkout },
