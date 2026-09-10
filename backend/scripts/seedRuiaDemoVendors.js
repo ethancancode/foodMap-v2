@@ -132,9 +132,13 @@ const VENDORS_DATA = [
 
 async function seedRuiaDemoVendors() {
   try {
-    console.log(`[FoodMap] Connecting to database: ${MONGO_URI}...`);
-    await mongoose.connect(MONGO_URI);
-    console.log('[FoodMap] Connected successfully.');
+    if (mongoose.connection.readyState !== 1) {
+      console.log(`[FoodMap] Connecting to database: ${MONGO_URI}...`);
+      await mongoose.connect(MONGO_URI);
+      console.log('[FoodMap] Connected successfully.');
+    } else {
+      console.log('[FoodMap] Using existing database connection...');
+    }
 
     let createdVendorsCount = 0;
     let createdDishesCount = 0;
