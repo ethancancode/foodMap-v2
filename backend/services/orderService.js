@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Food from '../models/Food.js';
+import FoodAvailability from '../models/FoodAvailability.js';
 import Vendor from '../models/Vendor.js';
 import User from '../models/User.js';
 import { deductFoodQuantity } from './foodService.js';
@@ -70,6 +71,35 @@ export async function createOrder(userId, data) {
   const totalAmount = subtotal + deliveryFee + platformFee;
   const orderNumber = `#FM${Math.floor(1000 + Math.random() * 9000)}`;
 
+  const primaryFood = await Food.findById(items[0]?.foodId).populate('vendor');
+
+  const resolvedPickupAddress =
+    primaryFood?.pickupAddress ||
+    primaryFood?.location?.pickupAddress ||
+    vendor.pickupAddress ||
+    vendor.location?.pickupAddress ||
+    vendor.location?.address ||
+    'Seawoods, Navi Mumbai';
+
+  // Determine resident's current live location snapshot
+  const residentCoords = data.residentLocation?.coordinates || (user?.location?.coordinates?.length === 2 ? user.location.coordinates : null);
+  const residentAddress = data.residentLocation?.address || user?.location?.address || '';
+
+  // If resident provided real live GPS coordinates at checkout, update their user record as well
+  if (residentCoords && residentCoords.length === 2 && (residentCoords[0] !== 73.0188 || residentCoords[1] !== 19.0225)) {
+    try {
+      await User.findByIdAndUpdate(userId, {
+        location: {
+          type: 'Point',
+          coordinates: residentCoords,
+          address: residentAddress || 'Current Live Location',
+        }
+      });
+    } catch (uErr) {
+      console.warn('[OrderService] Could not update user location:', uErr.message);
+    }
+  }
+
   const order = await Order.create({
     orderNumber,
     resident: userId,
@@ -86,27 +116,38 @@ export async function createOrder(userId, data) {
     deliveryFee,
     platformFee,
     totalAmount,
-    status: 'ACCEPTED',
+    status: 'PENDING',
     orderType: normalizedOrderType === 'DELIVERY' ? 'DELIVERY' : 'PICKUP',
-    pickupAddress: vendor.pickupAddress || vendor.location?.address || 'Bhandup West, Mumbai',
+    readyAt: primaryFood?.readyAt || data.readyAt || null,
+    cookingStatus: primaryFood?.cookingStatus || primaryFood?.timeReady || data.cookingStatus || data.timeReady || null,
+    pickupAddress: resolvedPickupAddress,
     specialInstructions: data.specialInstructions,
+    residentLocation: residentCoords ? {
+      type: 'Point',
+      coordinates: residentCoords,
+      address: residentAddress,
+    } : undefined,
     timeline: [
       {
-        status: 'ACCEPTED',
-        note: 'Order auto-confirmed from kitchen inventory',
+        status: 'PENDING',
+        note: 'Order placed by resident, waiting for kitchen acceptance',
         timestamp: new Date(),
       },
     ],
   });
 
   const populated = await Order.findById(order._id)
-    .populate('vendor', 'businessName category pickupAddress location rating totalReviews')
+    .populate({
+      path: 'vendor',
+      select: 'businessName category pickupAddress location rating totalReviews user',
+      populate: { path: 'user', select: 'name phone email avatar' }
+    })
     .populate('resident', 'name phone location');
 
   return populated;
 }
 
-export async function updateOrderStatus(orderId, { status, rejectionReason, note }) {
+export async function updateOrderStatus(orderId, { status, rejectionReason, note, isViewedByResident }) {
   let query = {};
   if (mongoose.Types.ObjectId.isValid(orderId)) {
     query._id = orderId;
@@ -119,21 +160,62 @@ export async function updateOrderStatus(orderId, { status, rejectionReason, note
     throw new Error('Order not found');
   }
 
-  const normalizedStatus = (status || '').toUpperCase();
-  order.status = normalizedStatus;
-  if (rejectionReason) order.rejectionReason = rejectionReason;
-  
-  order.timeline.push({
-    status: normalizedStatus,
-    timestamp: new Date(),
-    note: note || `Status updated to ${normalizedStatus}`,
-  });
+  const prevStatus = order.status;
+  if (status) {
+    const normalizedStatus = status.toUpperCase();
+    order.status = normalizedStatus;
+    if (rejectionReason !== undefined) order.rejectionReason = rejectionReason;
+    
+    order.timeline.push({
+      status: normalizedStatus,
+      timestamp: new Date(),
+      note: note || (rejectionReason ? `Order cancelled: ${rejectionReason}` : `Status updated to ${normalizedStatus}`),
+    });
+
+    // If order was cancelled / rejected and was not already cancelled, restore dish portion quantities
+    if (['CANCELLED', 'REJECTED'].includes(normalizedStatus) && !['CANCELLED', 'REJECTED'].includes(prevStatus)) {
+      if (order.items && order.items.length > 0) {
+        for (const itm of order.items) {
+          const foodId = itm.food?._id || itm.food;
+          if (foodId && mongoose.Types.ObjectId.isValid(foodId)) {
+            try {
+              await Food.findByIdAndUpdate(foodId, {
+                $inc: { quantity: itm.quantity || 1 },
+                $set: { available: true, isAvailable: true }
+              });
+              const updatedF = await Food.findById(foodId);
+              if (updatedF) {
+                await FoodAvailability.findOneAndUpdate(
+                  { food: updatedF._id },
+                  { quantity: updatedF.quantity, available: true, status: 'AVAILABLE', lastUpdated: new Date() },
+                  { upsert: true }
+                );
+              }
+            } catch (invErr) {
+              console.warn('[OrderService] Non-fatal inventory restoration warning:', invErr.message);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (isViewedByResident !== undefined) {
+    order.isViewedByResident = isViewedByResident;
+  }
 
   await order.save();
-  return await Order.findById(order._id)
-    .populate('vendor', 'businessName category pickupAddress location')
+  const populatedOrder = await Order.findById(order._id)
+    .populate({
+      path: 'vendor',
+      select: 'businessName category pickupAddress location rating totalReviews user',
+      populate: { path: 'user', select: 'name phone email avatar' }
+    })
     .populate('resident', 'name phone location');
+
+  return populatedOrder || order;
 }
+
 
 export async function getOrders(filters = {}) {
   const query = {};
@@ -142,7 +224,11 @@ export async function getOrders(filters = {}) {
   if (filters.status) query.status = filters.status.toUpperCase();
 
   return await Order.find(query)
-    .populate('vendor', 'businessName category pickupAddress location rating totalReviews')
+    .populate({
+      path: 'vendor',
+      select: 'businessName category pickupAddress location rating totalReviews user',
+      populate: { path: 'user', select: 'name phone email avatar' }
+    })
     .populate('resident', 'name phone location')
     .sort({ createdAt: -1 });
 }
@@ -155,6 +241,10 @@ export async function getOrderById(id) {
     query.orderNumber = id;
   }
   return await Order.findOne(query)
-    .populate('vendor', 'businessName category pickupAddress location')
+    .populate({
+      path: 'vendor',
+      select: 'businessName category pickupAddress location rating totalReviews user',
+      populate: { path: 'user', select: 'name phone email avatar' }
+    })
     .populate('resident', 'name phone location');
 }

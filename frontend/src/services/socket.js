@@ -77,6 +77,13 @@ export function onVendorUpdated(cb) {
   return () => s.off('vendor:statusUpdated', handler);
 }
 
+export function onVendorReviewAdded(cb) {
+  const s = getSocket();
+  const handler = (data) => cb(data);
+  s.on('vendor:reviewAdded', handler);
+  return () => s.off('vendor:reviewAdded', handler);
+}
+
 export function onOrderStatusUpdated(cb) {
   const s = getSocket();
   const handler = (data) => cb(data);
@@ -94,5 +101,12 @@ export function onOrderCreated(cb) {
 }
 
 export const onNewIncomingOrder = onOrderCreated;
+
+export function onLocationUpdated(cb) {
+  const s = getSocket();
+  const handler = (data) => cb(data);
+  s.on('location:updated', handler);
+  return () => s.off('location:updated', handler);
+}
 
 export default getSocket;

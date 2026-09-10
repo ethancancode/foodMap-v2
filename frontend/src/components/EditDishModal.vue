@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { foodApi } from '../services/api.js'
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js'
 
 const props = defineProps({
   isOpen: {
@@ -28,6 +29,7 @@ const editForm = ref({
   quantity: 1,
   category: 'Main Course',
   isVeg: true,
+  fulfillmentOptions: 'BOTH',
   cookingStatus: 'Ready now',
   image: '',
   customHours: '',
@@ -67,6 +69,7 @@ watch(
       quantity: dish.quantity !== undefined ? Number(dish.quantity) : 1,
       category: dish.category || 'Main Course',
       isVeg: dish.isVeg !== undefined ? Boolean(dish.isVeg) : (dish.diet !== 'non-veg'),
+      fulfillmentOptions: dish.fulfillmentOptions || 'BOTH',
       cookingStatus: matchedStatus,
       image: dish.image || '',
       customHours: ch,
@@ -161,10 +164,11 @@ async function saveDish() {
       category: editForm.value.category,
       isVeg: Boolean(editForm.value.isVeg),
       diet: editForm.value.isVeg ? 'veg' : 'non-veg',
+      fulfillmentOptions: editForm.value.fulfillmentOptions || 'BOTH',
       cookingStatus: finalStatus,
       timeReady: finalStatus,
       readyAt: readyAt ? readyAt.toISOString() : null,
-      image: editForm.value.image,
+      image: editForm.value.image || DEFAULT_FOOD_SVG,
       available: qty > 0,
       isAvailable: qty > 0,
     }
@@ -414,6 +418,42 @@ async function saveDish() {
               <span class="text-[10px] font-bold text-on-surface-variant">min</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Fulfillment Options (Both, Pickup Only, Delivery Only) -->
+      <div class="space-y-1.5">
+        <label class="text-xs font-bold text-on-surface uppercase tracking-wider block">Fulfillment Options</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            @click="editForm.fulfillmentOptions = 'BOTH'"
+            :class="editForm.fulfillmentOptions === 'BOTH' ? 'bg-primary text-on-primary font-bold shadow-xs border-primary' : 'bg-surface text-on-surface border border-outline-variant/40 hover:bg-surface-container'"
+            class="py-2 px-1.5 rounded-xl text-xs transition-all cursor-pointer flex flex-col items-center gap-1 text-center"
+          >
+            <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+            <span class="text-[10px] font-bold leading-tight">Both</span>
+          </button>
+
+          <button
+            type="button"
+            @click="editForm.fulfillmentOptions = 'PICKUP_ONLY'"
+            :class="editForm.fulfillmentOptions === 'PICKUP_ONLY' ? 'bg-primary text-on-primary font-bold shadow-xs border-primary' : 'bg-surface text-on-surface border border-outline-variant/40 hover:bg-surface-container'"
+            class="py-2 px-1.5 rounded-xl text-xs transition-all cursor-pointer flex flex-col items-center gap-1 text-center"
+          >
+            <span class="material-symbols-outlined text-[18px]">storefront</span>
+            <span class="text-[10px] font-bold leading-tight">Pickup Only</span>
+          </button>
+
+          <button
+            type="button"
+            @click="editForm.fulfillmentOptions = 'DELIVERY_ONLY'"
+            :class="editForm.fulfillmentOptions === 'DELIVERY_ONLY' ? 'bg-primary text-on-primary font-bold shadow-xs border-primary' : 'bg-surface text-on-surface border border-outline-variant/40 hover:bg-surface-container'"
+            class="py-2 px-1.5 rounded-xl text-xs transition-all cursor-pointer flex flex-col items-center gap-1 text-center"
+          >
+            <span class="material-symbols-outlined text-[18px]">directions_bike</span>
+            <span class="text-[10px] font-bold leading-tight">Delivery Only</span>
+          </button>
         </div>
       </div>
 

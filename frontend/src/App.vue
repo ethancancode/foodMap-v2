@@ -17,6 +17,7 @@ import OrderStatus from './views/OrderStatus.vue'
 import OrderPickup from './views/OrderPickup.vue'
 import OrderCompleted from './views/OrderCompleted.vue'
 import ResidentProfile from './views/ResidentProfile.vue'
+import ResidentOrders from './views/ResidentOrders.vue'
 import VendorDashboard from './views/VendorDashboard.vue'
 import PostNewFood from './views/PostNewFood.vue'
 import YouAreLive from './views/YouAreLive.vue'
@@ -44,6 +45,7 @@ const screenToPath = {
   checkout: '/checkout',
   order_confirmation: '/order-confirmation',
   order_status: '/order-status',
+  resident_orders: '/resident-orders',
   order_pickup: '/order-pickup',
   order_completed: '/order-completed',
   resident_profile: '/resident-profile',
@@ -70,6 +72,7 @@ const screenComponents = {
   checkout: Checkout,
   order_confirmation: OrderConfirmation,
   order_status: OrderStatus,
+  resident_orders: ResidentOrders,
   order_pickup: OrderPickup,
   order_completed: OrderCompleted,
   resident_profile: ResidentProfile,
@@ -84,10 +87,35 @@ const screenComponents = {
 
 // Drive active screen directly from current URL path
 const currentScreenId = computed(() => {
-  return pathToScreen[route.path] || 'welcome'
+  if (pathToScreen[route.path]) {
+    return pathToScreen[route.path]
+  }
+  if (route.path.startsWith('/order-confirmation')) {
+    return 'order_confirmation'
+  }
+  if (route.path.startsWith('/order-status')) {
+    return 'order_status'
+  }
+  if (route.path.startsWith('/order-pickup')) {
+    return 'order_pickup'
+  }
+  if (route.path.startsWith('/order-completed')) {
+    return 'order_completed'
+  }
+  if (route.path.startsWith('/vendor-profile')) {
+    return 'vendor_profile'
+  }
+  if (route.path.startsWith('/vendor-dashboard')) {
+    return 'vendor_dashboard'
+  }
+  if (route.path.startsWith('/resident-profile')) {
+    return 'resident_profile'
+  }
+  if (route.path.startsWith('/resident-orders')) {
+    return 'resident_orders'
+  }
+  return 'welcome'
 })
-
-
 
 const currentScreen = computed(() => {
   return screenComponents[currentScreenId.value] || Welcome_to_FoodMap
@@ -156,12 +184,61 @@ function navigateTo(target, payload = null) {
     }
   }
 
-  const targetPath = screenToPath[targetId] || '/'
+  let targetPath = screenToPath[targetId] || '/'
+
+  // If navigating to order routes with an order ID, include it in the URL
+  const orderObj = payload?.order || payload
+  const orderIdentifier = orderObj?._id || orderObj?.orderNumber || orderObj?.id
+  if (orderIdentifier) {
+    if (targetId === 'order_confirmation') {
+      targetPath = `/order-confirmation/${encodeURIComponent(orderIdentifier)}`
+    } else if (targetId === 'order_status') {
+      targetPath = `/order-status/${encodeURIComponent(orderIdentifier)}`
+    } else if (targetId === 'order_pickup') {
+      targetPath = `/order-pickup/${encodeURIComponent(orderIdentifier)}`
+    } else if (targetId === 'order_completed') {
+      targetPath = `/order-completed/${encodeURIComponent(orderIdentifier)}`
+    }
+  }
+
+  // If navigating to vendor_profile with a specific vendorId or vendor object
+  if (targetId === 'vendor_profile') {
+    const vendorId = payload?.vendorId || payload?.vendor?._id || payload?.vendor?.id || (typeof payload?.vendor === 'string' && payload.vendor.length === 24 ? payload.vendor : null) || authStore.user?.vendor?._id || authStore.user?.vendor?.id || authStore.user?.vendor || authStore.user?._id
+    if (vendorId) {
+      targetPath = `/vendor-profile/${encodeURIComponent(vendorId)}`
+    }
+  }
+
+  // If navigating to vendor_dashboard with vendor ID in URL
+  if (targetId === 'vendor_dashboard') {
+    const vendorId = payload?.vendorId || payload?.vendor?._id || payload?.vendor?.id || authStore.user?.vendor?._id || authStore.user?.vendor?.id || authStore.user?.vendor || authStore.user?._id
+    if (vendorId) {
+      targetPath = `/vendor-dashboard/${encodeURIComponent(vendorId)}`
+    }
+  }
+
+  // If navigating to resident_profile with resident/user ID in URL
+  if (targetId === 'resident_profile') {
+    const residentId = payload?.userId || payload?.residentId || authStore.user?._id || authStore.user?.id
+    if (residentId) {
+      targetPath = `/resident-profile/${encodeURIComponent(residentId)}`
+    }
+  }
+
+  // If navigating to resident_orders with resident/user ID in URL
+  if (targetId === 'resident_orders') {
+    const residentId = payload?.userId || payload?.residentId || authStore.user?._id || authStore.user?.id
+    if (residentId) {
+      targetPath = `/resident-orders/${encodeURIComponent(residentId)}`
+    }
+  }
+
   if (route.path !== targetPath) {
     router.push(targetPath)
   }
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
+
 
 function goBack() {
   if (window.history.length > 1) {
@@ -175,11 +252,22 @@ function goBack() {
 
 
 function handleAuthSuccess(authData) {
-  if (authStore.currentRole === 'vendor' || authStore.user?.role === 'vendor') {
-    navigateTo('vendor_dashboard')
+  const userId = authStore.user?._id || authStore.user?.id
+  const vendorId = authStore.user?.vendor?._id || authStore.user?.vendor?.id || authStore.user?.vendor || userId
+
+  if (authStore.currentRole === 'vendor' || authStore.user?.role === 'vendor' || authData?.role === 'vendor') {
+    if (vendorId) {
+      router.push(`/vendor-dashboard/${encodeURIComponent(vendorId)}`)
+    } else {
+      navigateTo('vendor_dashboard')
+    }
     showToast(`Welcome! Logged in as Kitchen Vendor (${authStore.user?.name || 'Chef'}).`)
   } else {
-    navigateTo('food_radar')
+    if (userId) {
+      router.push(`/radar?resident=${encodeURIComponent(userId)}`)
+    } else {
+      navigateTo('food_radar')
+    }
     showToast(`Welcome! Logged in as Resident (${authStore.user?.name || 'Resident'}).`)
   }
 }
@@ -231,16 +319,83 @@ function handleAction(event) {
   }
 }
 
+import { locationApi } from './services/api.js'
+
+let appGeoWatchId = null
+let lastUpdatedLocation = null
+
+function startContinuousLocationSync() {
+  if (!('geolocation' in navigator)) return
+  if (appGeoWatchId !== null) return
+
+  // Watch position with high accuracy
+  appGeoWatchId = navigator.geolocation.watchPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude
+      const lng = pos.coords.longitude
+      if (!lat || !lng) return
+
+      // Only sync if moved more than ~15-20 meters to save network calls
+      if (lastUpdatedLocation) {
+        const dLat = Math.abs(lat - lastUpdatedLocation.lat)
+        const dLng = Math.abs(lng - lastUpdatedLocation.lng)
+        if (dLat < 0.00015 && dLng < 0.00015) {
+          return
+        }
+      }
+
+      lastUpdatedLocation = { lat, lng }
+
+      // Reverse geocode to get a readable address
+      let readableAddress = 'Current Live Location'
+      try {
+        const bdcRes = await fetch(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
+        )
+        if (bdcRes.ok) {
+          const data = await bdcRes.json()
+          const locality = data.locality || data.city || data.principalSubdivision || ''
+          const neighborhood = data.localityInfo?.administrative?.[3]?.name || data.localityInfo?.administrative?.[2]?.name || ''
+          readableAddress = [neighborhood, locality].filter(Boolean).join(', ') || data.plusCode || 'Current Location'
+        }
+      } catch (e) {
+        // ignore geocode error
+      }
+
+      // Update in auth store
+      if (authStore.user) {
+        authStore.user.location = {
+          type: 'Point',
+          coordinates: [lng, lat],
+          address: readableAddress
+        }
+      }
+
+      // Send to backend if authenticated
+      if (authStore.isAuthenticated) {
+        locationApi.updateLocation({ lng, lat, address: readableAddress }).catch(() => {})
+      }
+    },
+    (err) => {
+      console.warn('[Location Sync Warning]', err.message)
+    },
+    { enableHighAccuracy: true, maximumAge: 5000 }
+  )
+}
+
 onMounted(async () => {
   try {
     getSocket()
     await authStore.initAuth()
+    startContinuousLocationSync()
     // If user is at root and already authenticated, direct to their home screen
     if (route.path === '/' && authStore.isAuthenticated && authStore.user) {
+      const userId = authStore.user._id || authStore.user.id
+      const vendorId = authStore.user.vendor?._id || authStore.user.vendor?.id || authStore.user.vendor || userId
       if (authStore.user.role === 'vendor') {
-        router.push('/vendor-dashboard')
+        router.push(vendorId ? `/vendor-dashboard/${encodeURIComponent(vendorId)}` : '/vendor-dashboard')
       } else {
-        router.push('/radar')
+        router.push(userId ? `/radar?resident=${encodeURIComponent(userId)}` : '/radar')
       }
     }
     foodStore.fetchFoods()

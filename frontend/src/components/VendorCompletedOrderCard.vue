@@ -46,15 +46,6 @@ function handleOpenMap() {
         <span class="text-[10px] font-bold text-on-surface-variant uppercase block">Earned</span>
         <span class="text-base sm:text-lg font-black text-primary">₹{{ order.price }}</span>
       </div>
-      <button
-        type="button"
-        @click="handleOpenMap"
-        class="p-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-        title="View Pickup Location on Map"
-        aria-label="View Location"
-      >
-        <span class="material-symbols-outlined text-[18px]">location_on</span>
-      </button>
     </div>
   </div>
 </template>

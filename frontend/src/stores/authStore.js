@@ -15,6 +15,7 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     setRole(role) {
       this.currentRole = role;
+      localStorage.setItem('foodmap_role', role);
       if (this.user) {
         this.user.role = role;
       }
@@ -43,10 +44,11 @@ export const useAuthStore = defineStore('auth', {
           this.token = res.token;
           this.user = res.user;
           this.currentRole = res.user.role || 'resident';
+          localStorage.setItem('foodmap_role', this.currentRole);
 
-          const isNewVendor = Boolean(res.isNewUser) && res.user.role === 'vendor' && !res.user.isOnboarded;
+          const isUnonboarded = Boolean(res.isNewUser) || !res.user.isOnboarded;
 
-          if (isNewVendor) {
+          if (isUnonboarded) {
             // Store pending token in sessionStorage so onboarding request is authorized,
             // but DO NOT save to localStorage! If page is refreshed, session is completely discarded.
             sessionStorage.setItem('foodmap_pending_token', res.token);
@@ -82,7 +84,8 @@ export const useAuthStore = defineStore('auth', {
           this.token = res.token;
           localStorage.setItem('foodmap_token', res.token);
           this.user = res.user;
-          this.currentRole = 'vendor';
+          this.currentRole = res.user?.role || data?.role || 'resident';
+          localStorage.setItem('foodmap_role', this.currentRole);
           this.isAuthenticated = true;
           this.isEnrolled = true;
           subscribeToUser(res.user._id || res.user.id);
@@ -114,12 +117,13 @@ export const useAuthStore = defineStore('auth', {
       try {
         const res = await authApi.getCurrentUser();
         if (res && res.user) {
-          if (res.user.role === 'vendor' && !res.user.isOnboarded) {
+          if (!res.user.isOnboarded) {
             this.logout();
             return null;
           }
           this.user = res.user;
           this.currentRole = res.user.role || 'resident';
+          localStorage.setItem('foodmap_role', this.currentRole);
           this.isAuthenticated = true;
           subscribeToUser(res.user._id || res.user.id);
           return res.user;
@@ -138,6 +142,7 @@ export const useAuthStore = defineStore('auth', {
       this.qrCode = null;
       this.isEnrolled = false;
       localStorage.removeItem('foodmap_token');
+      localStorage.removeItem('foodmap_role');
     },
   },
 });

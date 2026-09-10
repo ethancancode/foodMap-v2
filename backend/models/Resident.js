@@ -8,6 +8,14 @@ const residentSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    gender: {
+      type: String,
+      default: '',
+    },
+    occupation: {
+      type: String,
+      default: '',
+    },
     preferences: {
       radarDistanceLimit: {
         type: Number,

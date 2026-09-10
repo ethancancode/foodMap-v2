@@ -1,6 +1,7 @@
 import * as authService from '../services/authService.js';
 import User from '../models/User.js';
 import Vendor from '../models/Vendor.js';
+import Resident from '../models/Resident.js';
 
 export async function requestOTP(req, res, next) {
   try {
@@ -41,19 +42,26 @@ export async function verifyOTP(req, res, next) {
 export async function getMe(req, res, next) {
   try {
     const user = req.user;
-    if (user.role === 'vendor' && !user.isOnboarded) {
+    if (!user.isOnboarded) {
       // User started onboarding previously, but refreshed/closed without submitting!
       // Delete the incomplete un-onboarded user so the account is NEVER made.
       await User.findByIdAndDelete(user._id);
       return res.status(401).json({
         success: false,
-        message: 'Vendor onboarding was not completed. Account was discarded.',
+        message: 'Onboarding was not completed. Account was discarded.',
       });
     }
 
     let vendor = null;
+    let resident = null;
     if (user.role === 'vendor') {
       vendor = await Vendor.findOne({ user: user._id });
+    } else if (user.role === 'resident') {
+      resident = await Resident.findOne({ user: user._id }).populate({
+        path: 'vouchedVendors',
+        select: 'businessName category rating totalReviews coverImage user pickupAddress location',
+        populate: { path: 'user', select: 'name phone avatar' }
+      });
     }
 
     res.json({
@@ -64,13 +72,17 @@ export async function getMe(req, res, next) {
         phone: user.phone,
         name: user.name,
         role: user.role,
+        gender: user.gender,
+        occupation: user.occupation,
         avatar: user.avatar,
         location: user.location,
         isTotpSetup: user.isTotpSetup,
         isOnboarded: Boolean(user.isOnboarded),
         vendor,
+        resident,
       },
       vendor,
+      resident,
     });
   } catch (err) {
     next(err);
@@ -79,10 +91,14 @@ export async function getMe(req, res, next) {
 
 export async function completeOnboarding(req, res, next) {
   try {
-    const result = await authService.completeVendorOnboarding(req.user._id, req.body);
+    const isResident = req.user.role === 'resident' || req.body.role === 'resident';
+    const result = isResident
+      ? await authService.completeResidentOnboarding(req.user._id, req.body)
+      : await authService.completeVendorOnboarding(req.user._id, req.body);
+
     res.json({
       success: true,
-      message: 'Kitchen onboarding completed successfully',
+      message: isResident ? 'Resident onboarding completed successfully' : 'Kitchen onboarding completed successfully',
       ...result,
     });
   } catch (err) {

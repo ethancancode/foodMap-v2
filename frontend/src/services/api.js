@@ -42,6 +42,8 @@ export const vendorApi = {
     const target = id && id !== 'me' ? `/vendors/${id}` : '/vendors/me';
     return api.put(target, data || id).then((r) => r.data);
   },
+  submitReview: (vendorId, data) => api.post(`/vendors/${vendorId}/reviews`, data).then((r) => r.data),
+  getReviews: (vendorId) => api.get(`/vendors/${vendorId}/reviews`).then((r) => r.data),
 };
 
 export const orderApi = {
@@ -52,9 +54,14 @@ export const orderApi = {
   },
   getOrderById: (id) => api.get(`/orders/${id}`).then((r) => r.data),
   createOrder: (data) => api.post('/orders', data).then((r) => r.data),
-  updateStatus: (id, status, note = '') =>
-    api.patch(`/orders/${id}/status`, { status, note }).then((r) => r.data),
+  updateStatus: (id, status, noteOrOptions = '') => {
+    const body = typeof noteOrOptions === 'object' && noteOrOptions !== null
+      ? { status, ...noteOrOptions }
+      : { status, note: noteOrOptions, rejectionReason: noteOrOptions };
+    return api.patch(`/orders/${id}/status`, body).then((r) => r.data);
+  },
 };
+
 
 export const authApi = {
   requestOtp: (payload) => {
@@ -65,6 +72,12 @@ export const authApi = {
   getCurrentUser: () => api.get('/auth/me').then((r) => r.data),
   updateProfile: (data) => api.put('/auth/profile', data).then((r) => r.data),
   completeOnboarding: (data) => api.post('/auth/complete-onboarding', data).then((r) => r.data),
+};
+
+export const residentApi = {
+  getProfile: (id) => api.get(id ? `/residents/profile/${id}` : '/residents/profile').then((r) => r.data),
+  updatePreferences: (data) => api.put('/residents/preferences', data).then((r) => r.data),
+  vouchVendor: (vendorId) => api.post('/residents/vouch', { vendorId }).then((r) => r.data),
 };
 
 export const locationApi = {

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { foodApi, vendorApi } from '../services/api.js'
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js'
 import LocationPickerModal from '../components/LocationPickerModal.vue'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
@@ -25,6 +26,7 @@ const customHours = ref('')
 const customMinutes = ref('')
 const itemCategory = ref('Main Course')
 const isVeg = ref(true)
+const fulfillmentOptions = ref('BOTH') // 'BOTH' | 'PICKUP_ONLY' | 'DELIVERY_ONLY'
 const itemDesc = ref('')
 const itemImage = ref('')
 const isPosting = ref(false)
@@ -44,6 +46,7 @@ function loadDraft() {
     if (draft.customMinutes !== undefined) customMinutes.value = draft.customMinutes
     if (draft.itemCategory !== undefined) itemCategory.value = draft.itemCategory
     if (draft.isVeg !== undefined) isVeg.value = draft.isVeg
+    if (draft.fulfillmentOptions !== undefined) fulfillmentOptions.value = draft.fulfillmentOptions
     if (draft.itemDesc !== undefined) itemDesc.value = draft.itemDesc
     if (draft.itemImage !== undefined) itemImage.value = draft.itemImage
   } catch (e) {
@@ -62,6 +65,7 @@ function saveDraft() {
       customMinutes: customMinutes.value,
       itemCategory: itemCategory.value,
       isVeg: isVeg.value,
+      fulfillmentOptions: fulfillmentOptions.value,
       itemDesc: itemDesc.value,
       itemImage: itemImage.value
     }
@@ -79,7 +83,7 @@ function clearDraft() {
 
 // Watch all form fields and persist
 watch(
-  [itemName, itemPrice, itemQty, readyTime, customHours, customMinutes, itemCategory, isVeg, itemDesc, itemImage],
+  [itemName, itemPrice, itemQty, readyTime, customHours, customMinutes, itemCategory, isVeg, fulfillmentOptions, itemDesc, itemImage],
   () => {
     saveDraft()
   },
@@ -293,11 +297,12 @@ async function handlePost() {
       isAvailable: true,
       isVeg: Boolean(isVeg.value),
       diet: isVeg.value ? 'veg' : 'non-veg',
+      fulfillmentOptions: fulfillmentOptions.value || 'BOTH',
       cookingStatus: effectiveStatus,
       timeReady: effectiveStatus,
       readyAt: readyAt ? readyAt.toISOString() : null,
       category: itemCategory.value,
-      image: itemImage.value,
+      image: itemImage.value || DEFAULT_FOOD_SVG,
       vendorName: vendorProfile.value?.businessName || props.user?.name || "My Kitchen",
       vendorLocation: {
         type: 'Point',
@@ -626,6 +631,45 @@ async function handlePost() {
                 <span class="material-symbols-outlined text-[15px] text-red-600">error</span>
                 <span>{{ errors.customTime }}</span>
               </p>
+            </div>
+
+            <!-- Fulfillment Options Selector (Pickup, Delivery, or Both) -->
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-bold text-on-surface uppercase tracking-wider block">Fulfillment Options</label>
+                <span class="text-[11px] text-on-surface-variant font-medium">How neighbors can get this dish</span>
+              </div>
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  @click="fulfillmentOptions = 'BOTH'"
+                  :class="fulfillmentOptions === 'BOTH' ? 'bg-primary text-on-primary font-bold shadow-md ring-2 ring-primary/20 border-primary' : 'bg-surface text-on-surface border border-outline-variant hover:bg-surface-container'"
+                  class="py-2.5 px-2 rounded-xl text-xs transition-all cursor-pointer flex flex-col items-center gap-1 text-center"
+                >
+                  <span class="material-symbols-outlined text-[20px]">sync_alt</span>
+                  <span class="font-bold text-[11px] leading-tight">Both (Pickup & Delivery)</span>
+                </button>
+
+                <button
+                  type="button"
+                  @click="fulfillmentOptions = 'PICKUP_ONLY'"
+                  :class="fulfillmentOptions === 'PICKUP_ONLY' ? 'bg-primary text-on-primary font-bold shadow-md ring-2 ring-primary/20 border-primary' : 'bg-surface text-on-surface border border-outline-variant hover:bg-surface-container'"
+                  class="py-2.5 px-2 rounded-xl text-xs transition-all cursor-pointer flex flex-col items-center gap-1 text-center"
+                >
+                  <span class="material-symbols-outlined text-[20px]">storefront</span>
+                  <span class="font-bold text-[11px] leading-tight">Pickup Only</span>
+                </button>
+
+                <button
+                  type="button"
+                  @click="fulfillmentOptions = 'DELIVERY_ONLY'"
+                  :class="fulfillmentOptions === 'DELIVERY_ONLY' ? 'bg-primary text-on-primary font-bold shadow-md ring-2 ring-primary/20 border-primary' : 'bg-surface text-on-surface border border-outline-variant hover:bg-surface-container'"
+                  class="py-2.5 px-2 rounded-xl text-xs transition-all cursor-pointer flex flex-col items-center gap-1 text-center"
+                >
+                  <span class="material-symbols-outlined text-[20px]">directions_bike</span>
+                  <span class="font-bold text-[11px] leading-tight">Delivery Only</span>
+                </button>
+              </div>
             </div>
 
             <!-- Location -->

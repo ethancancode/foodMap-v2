@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js'
 
 const props = defineProps({
   item: {
@@ -53,7 +54,7 @@ function onToggleSoldOut() {
     <!-- Image & Overlay Section -->
     <div class="relative w-full aspect-[16/10] bg-surface-container-high overflow-hidden">
       <img
-        :src="item.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=80'"
+        :src="item.image || DEFAULT_FOOD_SVG"
         :alt="item.name"
         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         loading="lazy"

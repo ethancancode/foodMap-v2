@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js'
 
 const props = defineProps({
   item: {
@@ -25,7 +26,7 @@ const countdown = computed(() => {
     <!-- Dish Photo -->
     <div class="relative w-full aspect-[4/3] overflow-hidden bg-surface-container">
       <img
-        :src="item.image"
+        :src="item.image || DEFAULT_FOOD_SVG"
         :alt="item.name"
         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         loading="lazy"
@@ -37,6 +38,22 @@ const countdown = computed(() => {
       >
         <span :class="item.quantity <= 2 ? 'bg-white' : 'bg-primary'" class="w-2 h-2 rounded-full animate-ping"></span>
         <span>{{ item.quantity }} left</span>
+      </div>
+
+      <!-- Fulfillment Highlight Badge (Pickup only or Delivery only) -->
+      <div
+        v-if="item.fulfillmentOptions === 'PICKUP_ONLY'"
+        class="absolute top-2.5 right-2.5 bg-amber-500/95 text-white backdrop-blur-md px-2.5 py-1 rounded-full shadow-md flex items-center gap-1 text-[10px] font-bold tracking-wide"
+      >
+        <span class="material-symbols-outlined text-[13px]">storefront</span>
+        <span>Pickup Only</span>
+      </div>
+      <div
+        v-else-if="item.fulfillmentOptions === 'DELIVERY_ONLY'"
+        class="absolute top-2.5 right-2.5 bg-blue-600/95 text-white backdrop-blur-md px-2.5 py-1 rounded-full shadow-md flex items-center gap-1 text-[10px] font-bold tracking-wide"
+      >
+        <span class="material-symbols-outlined text-[13px]">directions_bike</span>
+        <span>Delivery Only</span>
       </div>
 
       <!-- Price Tag -->

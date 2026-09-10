@@ -1,5 +1,7 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { orderApi } from '../services/api.js'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
 
@@ -10,26 +12,86 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['navigate', 'action', 'role-switch'])
+const route = useRoute()
+
+const fetchedOrder = ref(null)
+const isLoadingOrder = ref(false)
 
 function formatVendorName(val) {
-  if (!val) return 'Priya Kitchen'
-  if (typeof val === 'string') return val
-  return val.businessName || val.name || 'Priya Kitchen'
+  if (!val) return 'Home Kitchen'
+  if (typeof val === 'string') {
+    const trimmed = val.trim()
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        return parsed.businessName || parsed.name || 'Home Kitchen'
+      } catch (e) {
+        // Not valid JSON
+      }
+    }
+    return trimmed || 'Home Kitchen'
+  }
+  if (typeof val === 'object') {
+    return val.businessName || val.name || 'Home Kitchen'
+  }
+  return 'Home Kitchen'
 }
 
-const orderData = computed(() => ({
-  id: props.order?.id || '#FM1024',
-  item: props.order?.item || 'Rajma Chawal',
-  vendor: formatVendorName(props.order?.vendorName || props.order?.vendor),
-  qty: props.order?.qty || 2,
-  total: props.order?.total || 195,
-  fulfillment: props.order?.fulfillment || 'pickup'
-}))
+const orderData = computed(() => {
+  const o = fetchedOrder.value || props.order || {}
+  const rawVendor = o.vendorName || o.vendor || o.vendorObj
+  const cleanVendorName = formatVendorName(rawVendor)
+
+  return {
+    ...o,
+    id: o.orderNumber || o.id || '#FM1024',
+    _id: o._id || o.id,
+    item: o.foodName || o.item || o.itemSummary || 'Fresh Homemade Meal',
+    vendor: cleanVendorName,
+    vendorName: cleanVendorName,
+    qty: o.quantity || o.qty || 1,
+    total: o.totalAmount || o.total || 0,
+    fulfillment: o.fulfillment || (o.orderType === 'DELIVERY' ? 'delivery' : 'pickup'),
+    pickupAddress: o.pickupAddress || o.address || (typeof o.vendor === 'object' ? (o.vendor?.pickupAddress || o.vendor?.location?.pickupAddress) : null) || 'Seawoods, Navi Mumbai',
+  }
+})
+
+onMounted(async () => {
+  // Extract order identifier from route param e.g. /order-confirmation/:id or query
+  const paramId = route.params?.id || route.query?.id
+  const targetId = paramId || props.order?._id || props.order?.id || props.order?.orderNumber
+
+  if (targetId) {
+    isLoadingOrder.value = true
+    try {
+      const res = await orderApi.getOrderById(targetId)
+      if (res?.order || res?.data) {
+        fetchedOrder.value = res.order || res.data
+      }
+    } catch (err) {
+      console.warn('Could not fetch order from URL id:', err.message)
+    } finally {
+      isLoadingOrder.value = false
+    }
+  } else if (!props.order) {
+    // If refreshed on plain /order-confirmation without props, load user's latest order
+    try {
+      const res = await orderApi.getOrders()
+      const list = res?.orders || res?.data || []
+      if (list.length > 0) {
+        fetchedOrder.value = list[0]
+      }
+    } catch (e) {
+      console.warn('Could not fetch latest order:', e)
+    }
+  }
+})
 
 function navigateTo(route, payload = null) {
   emit('navigate', route, payload)
 }
 </script>
+
 
 <template>
   <div class="component-root w-full min-h-screen bg-background text-on-surface">

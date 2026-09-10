@@ -23,6 +23,16 @@ const userSchema = new mongoose.Schema(
       enum: ['resident', 'vendor', 'admin'],
       default: 'resident',
     },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other', 'prefer_not_to_say', ''],
+      default: '',
+    },
+    occupation: {
+      type: String,
+      enum: ['working', 'student', 'prefer_not_to_tell', 'other', ''],
+      default: '',
+    },
     avatar: {
       type: String,
       default: '',

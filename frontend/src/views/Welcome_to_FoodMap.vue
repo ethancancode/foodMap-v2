@@ -31,10 +31,14 @@ const toast = ref({
 })
 
 const formErrors = ref({
+  residentName: false,
+  residentGender: false,
+  residentOccupation: false,
   chefName: false,
   kitchenName: false,
   pickupAddress: false,
 })
+
 
 function showToast(message, type = 'warning') {
   if (toast.value.timer) clearTimeout(toast.value.timer)
@@ -56,6 +60,34 @@ const pickupAddress = ref('')
 const coordinates = ref([73.0188, 19.0225])
 const isLocating = ref(false)
 const isMapModalOpen = ref(false)
+
+// New Resident Onboarding Details (Prompted for new resident accounts after OTP)
+const residentName = ref('')
+const residentGender = ref('') // 'male' | 'female' | 'other' | 'prefer_not_to_say'
+const residentOccupation = ref('') // 'working' | 'student' | 'prefer_not_to_tell'
+const residentDiet = ref('all') // 'all' | 'veg' | 'non-veg'
+const residentDistance = ref(500) // 500 | 1000 | 3000
+const residentAvatar = ref('')
+const residentAvatarInput = ref(null)
+
+function handleResidentAvatarChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) {
+    onboardingError.value = 'Profile picture should be less than 5MB'
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = (event) => {
+    residentAvatar.value = event.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+function removeResidentAvatar() {
+  residentAvatar.value = ''
+  if (residentAvatarInput.value) residentAvatarInput.value.value = ''
+}
 
 // Step 5: Trust & Kitchen Story (Bio & Experience)
 const experience = ref('')
@@ -140,7 +172,8 @@ async function detectCurrentLocation() {
           const data = await bdcRes.json()
           const locality = data.locality || data.neighbourhood || data.quarter || ''
           const city = data.city || data.principalSubdivision || 'Navi Mumbai'
-          pickupAddress.value = locality ? `${locality}, ${city}` : city
+          const locString = locality ? `${locality}, ${city}` : city
+          pickupAddress.value = locString
         }
       } catch (e) {
         pickupAddress.value = 'Seawoods, Navi Mumbai'
@@ -283,6 +316,28 @@ async function resendOtp() {
   }
 }
 
+async function requestNewQrCode() {
+  isSubmitting.value = true
+  otpDigits.value = Array(OTP_LENGTH).fill('')
+  otpError.value = ''
+  try {
+    await authStore.requestOtp({
+      phone: formattedPhone(),
+      role: selectedRole.value,
+      resetTotp: true,
+    })
+    startResendCountdown()
+  } catch (err) {
+    otpError.value = err.message || 'Could not reset 2FA. Please try again.'
+  } finally {
+    isSubmitting.value = false
+    await nextTick()
+    if (otpInputs.value[0]) {
+      otpInputs.value[0].focus()
+    }
+  }
+}
+
 async function verifyOtp() {
   if (!isOtpComplete.value) return
   isSubmitting.value = true
@@ -298,14 +353,18 @@ async function verifyOtp() {
     const isNewUser = Boolean(res?.isNewUser)
     const isVendor = (authStore.user?.role === 'vendor' || selectedRole.value === 'vendor')
 
-    // If it's a new vendor account, prompt for kitchen setup before entering
-    if (isNewUser && isVendor) {
-      currentStep.value = 'vendor-onboarding'
-      if (!pickupAddress.value) {
-        detectCurrentLocation()
+    // If it's a new account, prompt for profile setup before entering
+    if (isNewUser) {
+      if (isVendor) {
+        currentStep.value = 'vendor-onboarding'
+        if (!pickupAddress.value) {
+          detectCurrentLocation()
+        }
+      } else {
+        currentStep.value = 'resident-onboarding'
       }
     } else {
-      // Returning user or resident: go straight to dashboard/app
+      // Returning user: go straight to dashboard/radar
       currentStep.value = 'success'
       emit('auth-success', {
         role: authStore.user?.role || selectedRole.value,
@@ -322,6 +381,75 @@ async function verifyOtp() {
     isSubmitting.value = false
   }
 }
+
+async function finalizeResidentSetup() {
+  formErrors.value.residentName = false
+  formErrors.value.residentGender = false
+  formErrors.value.residentOccupation = false
+
+  const nameVal = residentName.value.trim()
+  let hasError = false
+
+  if (!nameVal || nameVal.length < 2) {
+    formErrors.value.residentName = true
+    hasError = true
+  }
+
+  if (!residentGender.value) {
+    formErrors.value.residentGender = true
+    hasError = true
+  }
+
+  if (!residentOccupation.value) {
+    formErrors.value.residentOccupation = true
+    hasError = true
+  }
+
+  if (hasError) {
+    if (formErrors.value.residentName && !nameVal) {
+      onboardingError.value = 'Please enter your full name'
+      showToast('Please enter your full name to continue', 'warning')
+    } else if (formErrors.value.residentName && nameVal.length < 2) {
+      onboardingError.value = 'Name must be at least 2 characters'
+      showToast('Name must be at least 2 characters long', 'warning')
+    } else if (formErrors.value.residentGender) {
+      onboardingError.value = 'Please select your gender'
+      showToast('Please select your gender to continue', 'warning')
+    } else if (formErrors.value.residentOccupation) {
+      onboardingError.value = 'Please select what you do (working / student / prefer not to tell)'
+      showToast('Please select what you do to continue', 'warning')
+    }
+    return
+  }
+
+  isSubmitting.value = true
+  onboardingError.value = ''
+
+  try {
+    const payload = {
+      role: 'resident',
+      name: nameVal,
+      gender: residentGender.value,
+      occupation: residentOccupation.value,
+      dietaryPreference: residentDiet.value,
+      radarDistanceLimit: residentDistance.value,
+      avatar: residentAvatar.value || '',
+    }
+
+    await authStore.completeOnboarding(payload)
+
+    currentStep.value = 'success'
+    emit('auth-success', {
+      role: 'resident',
+      phone: phoneNumber.value,
+    })
+  } catch (err) {
+    onboardingError.value = err.response?.data?.message || err.message || 'Could not save resident profile. Please try again.'
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
 
 function proceedToStory() {
   formErrors.value = {
@@ -492,8 +620,8 @@ onBeforeUnmount(() => {
         <div class="form-pane">
           <div class="form-container">
             <!-- Brand Logo & Header -->
-            <div class="brand-header">
-              <div class="logo-wrapper">
+            <div class="brand-header" :class="{ 'is-onboarding-step': currentStep.includes('onboarding') || currentStep.includes('preferences') || currentStep.includes('story') || currentStep.includes('photos') }">
+              <div v-if="currentStep === 'roles' || currentStep === 'phone' || currentStep === 'otp'" class="logo-wrapper">
                 <img
                   alt="FoodMap Logo"
                   class="brand-logo"
@@ -556,6 +684,12 @@ onBeforeUnmount(() => {
                   <h2 class="title-main">Kitchen Photos 📸</h2>
                   <p class="subtitle-main">
                     Add a profile picture and cover banner for your kitchen (optional, can skip for now).
+                  </p>
+                </div>
+                <div v-else-if="currentStep === 'resident-onboarding'" key="header-resident-onboarding" class="heading-group">
+                  <h2 class="title-main">Set Up Resident Profile 👤</h2>
+                  <p class="subtitle-main">
+                    Tell us your details to personalize your FoodMap experience.
                   </p>
                 </div>
                 <div v-else-if="currentStep === 'success'" key="header-success" class="heading-group">
@@ -722,6 +856,17 @@ onBeforeUnmount(() => {
                     @click="resendOtp"
                   >
                     Refresh Setup QR
+                  </button>
+                </div>
+
+                <div v-else class="resend-row">
+                  <button
+                    type="button"
+                    class="resend-btn reset-2fa-btn"
+                    :disabled="isSubmitting"
+                    @click="requestNewQrCode"
+                  >
+                    Lost your Authenticator code? Scan new QR
                   </button>
                 </div>
 
@@ -1032,6 +1177,221 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
               </div>
+
+              <!-- STEP: Resident Onboarding (Name, Gender, Occupation, Diet, Radar) -->
+              <form
+                v-else-if="currentStep === 'resident-onboarding'"
+                key="step-resident-onboarding"
+                class="phone-form"
+                novalidate
+                @submit.prevent="finalizeResidentSetup"
+              >
+                <div class="vendor-setup-section">
+                  <!-- Name Field -->
+                  <div class="input-group">
+                    <label for="onboarding-resident-name" class="input-label">Your Full Name</label>
+                    <div class="custom-input-field" :class="{ 'has-field-error': formErrors.residentName }">
+                      <span class="material-symbols-outlined input-icon">person</span>
+                      <input
+                        id="onboarding-resident-name"
+                        v-model="residentName"
+                        type="text"
+                        placeholder="e.g. Aditya Sharma"
+                        class="text-input"
+                        @input="formErrors.residentName = false"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Gender Field -->
+                  <div class="input-group">
+                    <label class="input-label flex items-center justify-between">
+                      <span>Gender</span>
+                      <span v-if="formErrors.residentGender" class="text-[11px] text-red-500 font-medium">Please select a gender</span>
+                    </label>
+                    <div
+                      class="grid grid-cols-3 gap-2 mt-1 p-1 rounded-xl transition-all"
+                      :class="{ 'has-field-error': formErrors.residentGender }"
+                    >
+                      <button
+                        type="button"
+                        @click="residentGender = 'male'; formErrors.residentGender = false"
+                        :class="residentGender === 'male' ? 'bg-primary text-on-primary font-bold shadow-sm ring-2 ring-primary/20' : 'bg-surface-container text-on-surface hover:bg-surface-variant border-outline-variant/20'"
+                        class="py-2.5 px-2 rounded-xl text-xs flex flex-col items-center gap-1 transition-all cursor-pointer border"
+                      >
+                        <span class="material-symbols-outlined text-[20px]">male</span>
+                        <span class="font-semibold">Male</span>
+                      </button>
+                      <button
+                        type="button"
+                        @click="residentGender = 'female'; formErrors.residentGender = false"
+                        :class="residentGender === 'female' ? 'bg-primary text-on-primary font-bold shadow-sm ring-2 ring-primary/20' : 'bg-surface-container text-on-surface hover:bg-surface-variant border-outline-variant/20'"
+                        class="py-2.5 px-2 rounded-xl text-xs flex flex-col items-center gap-1 transition-all cursor-pointer border"
+                      >
+                        <span class="material-symbols-outlined text-[20px]">female</span>
+                        <span class="font-semibold">Female</span>
+                      </button>
+                      <button
+                        type="button"
+                        @click="residentGender = 'prefer_not_to_say'; formErrors.residentGender = false"
+                        :class="residentGender === 'prefer_not_to_say' ? 'bg-primary text-on-primary font-bold shadow-sm ring-2 ring-primary/20' : 'bg-surface-container text-on-surface hover:bg-surface-variant border-outline-variant/20'"
+                        class="py-2.5 px-1 rounded-xl text-xs flex flex-col items-center gap-1 transition-all cursor-pointer border text-center"
+                      >
+                        <span class="material-symbols-outlined text-[20px]">visibility_off</span>
+                        <span class="font-semibold text-[11px] leading-tight">Prefer not to say</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Occupation / What are you? -->
+                  <div class="input-group">
+                    <label class="input-label flex items-center justify-between">
+                      <span>What are you?</span>
+                      <span v-if="formErrors.residentOccupation" class="text-[11px] text-red-500 font-medium">Please select your occupation</span>
+                    </label>
+                    <div
+                      class="grid grid-cols-3 gap-2 mt-1 p-1 rounded-xl transition-all"
+                      :class="{ 'has-field-error': formErrors.residentOccupation }"
+                    >
+                      <button
+                        type="button"
+                        @click="residentOccupation = 'working'; formErrors.residentOccupation = false"
+                        :class="residentOccupation === 'working' ? 'bg-primary text-on-primary font-bold shadow-sm ring-2 ring-primary/20' : 'bg-surface-container text-on-surface hover:bg-surface-variant border-outline-variant/20'"
+                        class="py-2.5 px-2 rounded-xl text-xs flex flex-col items-center gap-1 border transition-all cursor-pointer"
+                      >
+                        <span class="material-symbols-outlined text-[20px]">work</span>
+                        <span class="font-semibold">Working</span>
+                      </button>
+                      <button
+                        type="button"
+                        @click="residentOccupation = 'student'; formErrors.residentOccupation = false"
+                        :class="residentOccupation === 'student' ? 'bg-primary text-on-primary font-bold shadow-sm ring-2 ring-primary/20' : 'bg-surface-container text-on-surface hover:bg-surface-variant border-outline-variant/20'"
+                        class="py-2.5 px-2 rounded-xl text-xs flex flex-col items-center gap-1 border transition-all cursor-pointer"
+                      >
+                        <span class="material-symbols-outlined text-[20px]">school</span>
+                        <span class="font-semibold">Student</span>
+                      </button>
+                      <button
+                        type="button"
+                        @click="residentOccupation = 'prefer_not_to_tell'; formErrors.residentOccupation = false"
+                        :class="residentOccupation === 'prefer_not_to_tell' ? 'bg-primary text-on-primary font-bold shadow-sm ring-2 ring-primary/20' : 'bg-surface-container text-on-surface hover:bg-surface-variant border-outline-variant/20'"
+                        class="py-2.5 px-1.5 rounded-xl text-xs flex flex-col items-center gap-1 border transition-all cursor-pointer text-center"
+                      >
+                        <span class="material-symbols-outlined text-[20px]">do_not_disturb_on</span>
+                        <span class="font-semibold text-[11px] leading-tight">Prefer not to tell</span>
+                      </button>
+                    </div>
+                  </div>
+
+
+                  <!-- Dietary Preference -->
+                  <div class="input-group">
+                    <label class="input-label">Dietary Preference</label>
+                    <div class="grid grid-cols-3 gap-2 mt-1">
+                      <button
+                        type="button"
+                        @click="residentDiet = 'all'"
+                        :class="residentDiet === 'all' ? 'bg-primary text-on-primary font-bold shadow-sm ring-2 ring-primary/20' : 'bg-surface-container text-on-surface hover:bg-surface-variant border-outline-variant/20'"
+                        class="py-2.5 px-2 rounded-xl text-xs flex flex-col items-center gap-1 transition-all cursor-pointer border"
+                      >
+                        <span class="material-symbols-outlined text-[20px]">restaurant</span>
+                        <span class="font-semibold">All Foods</span>
+                      </button>
+                      <button
+                        type="button"
+                        @click="residentDiet = 'veg'"
+                        :class="residentDiet === 'veg' ? 'bg-green-600 text-white font-bold shadow-sm ring-2 ring-green-600/30' : 'bg-surface-container text-on-surface hover:bg-surface-variant border-outline-variant/20'"
+                        class="py-2.5 px-2 rounded-xl text-xs flex flex-col items-center gap-1 transition-all cursor-pointer border"
+                      >
+                        <span class="material-symbols-outlined text-[20px]">eco</span>
+                        <span class="font-semibold">Pure Veg</span>
+                      </button>
+                      <button
+                        type="button"
+                        @click="residentDiet = 'non-veg'"
+                        :class="residentDiet === 'non-veg' ? 'bg-amber-700 text-white font-bold shadow-sm ring-2 ring-amber-700/30' : 'bg-surface-container text-on-surface hover:bg-surface-variant border-outline-variant/20'"
+                        class="py-2.5 px-2 rounded-xl text-xs flex flex-col items-center gap-1 transition-all cursor-pointer border"
+                      >
+                        <span class="material-symbols-outlined text-[20px]">set_meal</span>
+                        <span class="font-semibold">Non-Veg</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Optional Resident Profile Avatar -->
+                  <div class="photo-upload-group pt-1 border-t border-outline-variant/20">
+                    <div class="photo-upload-header">
+                      <label class="input-label photo-header-label">Profile Picture</label>
+                      <span class="optional-tag">Optional</span>
+                    </div>
+
+                    <div class="avatar-upload-row">
+                      <div
+                        class="avatar-circle-preview"
+                        :class="{ 'has-avatar': Boolean(residentAvatar) }"
+                        @click="residentAvatarInput?.click()"
+                      >
+                        <img
+                          v-if="residentAvatar"
+                          :src="residentAvatar"
+                          alt="Resident avatar preview"
+                          class="avatar-circle-img"
+                        />
+                        <div v-else class="avatar-circle-placeholder">
+                          <span class="text-xl font-bold text-primary">
+                            {{ (residentName || 'R').charAt(0).toUpperCase() }}
+                          </span>
+                        </div>
+
+                        <button
+                          v-if="residentAvatar"
+                          type="button"
+                          class="avatar-remove-btn"
+                          title="Remove Avatar"
+                          @click.stop="removeResidentAvatar"
+                        >
+                          <span class="material-symbols-outlined text-[13px]">close</span>
+                        </button>
+                      </div>
+
+                      <div class="avatar-upload-action">
+                        <button
+                          type="button"
+                          class="upload-trigger-btn"
+                          @click="residentAvatarInput?.click()"
+                        >
+                          <span class="material-symbols-outlined text-[16px]">cloud_upload</span>
+                          <span>{{ residentAvatar ? 'Change Photo' : 'Upload Photo' }}</span>
+                        </button>
+                        <span class="text-[11px] text-on-surface-variant">Square avatar photo</span>
+                      </div>
+                    </div>
+                    <input
+                      ref="residentAvatarInput"
+                      type="file"
+                      accept="image/*"
+                      class="hidden-file-input"
+                      @change="handleResidentAvatarChange"
+                    />
+                  </div>
+                </div>
+
+                <span v-if="onboardingError" class="error-msg">{{ onboardingError }}</span>
+
+                <button
+                  type="submit"
+                  class="submit-btn"
+                  :disabled="isSubmitting"
+                >
+                  <span v-if="isSubmitting" class="loading-state">
+                    <span class="spinner"></span>
+                    Saving Profile...
+                  </span>
+                  <span v-else>
+                    Explore Nearby Food 🚀
+                  </span>
+                </button>
+              </form>
               <!-- STEP 5: Success State -->
               <div v-else-if="currentStep === 'success'" key="step-success" class="success-state">
                 <div class="success-icon-wrap">
@@ -1414,36 +1774,51 @@ onBeforeUnmount(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 2.5rem 1.75rem;
+  justify-content: flex-start;
+  padding: 2rem 1.5rem;
   background: var(--color-surface);
   box-sizing: border-box;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(169, 54, 32, 0.25) transparent;
+}
+
+.form-pane::-webkit-scrollbar {
+  width: 6px;
+}
+
+.form-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.form-pane::-webkit-scrollbar-thumb {
+  background: rgba(169, 54, 32, 0.25);
+  border-radius: 9999px;
+}
+
+.form-pane::-webkit-scrollbar-thumb:hover {
+  background: rgba(169, 54, 32, 0.45);
 }
 
 @media (min-width: 640px) {
   .form-pane {
-    padding: 3.5rem 3rem;
+    padding: 2.5rem 2.25rem;
   }
 }
 
 @media (min-width: 1024px) {
   .form-pane {
-    width: 42%;
+    width: 44%;
     height: 100%;
-    padding: 2.25rem 3.25rem;
-    overflow-y: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-  .form-pane::-webkit-scrollbar {
-    display: none;
+    max-height: 700px;
+    padding: 2rem 2.5rem 2.5rem 2.5rem;
   }
 }
 
 .form-container {
   width: 100%;
   max-width: 380px;
-  margin: auto auto;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
 }
@@ -1493,6 +1868,20 @@ onBeforeUnmount(() => {
 
 .icon-back {
   font-size: 16px;
+}
+
+.brand-header.is-onboarding-step {
+  margin-bottom: 0.75rem;
+}
+
+.brand-header.is-onboarding-step .title-main {
+  font-size: 1.35rem;
+  margin-bottom: 0.25rem;
+}
+
+.brand-header.is-onboarding-step .subtitle-main {
+  font-size: 0.825rem;
+  line-height: 1.4;
 }
 
 .title-main {
@@ -2093,6 +2482,24 @@ onBeforeUnmount(() => {
 
 .resend-btn:hover {
   text-decoration: underline;
+}
+
+.reset-2fa-btn {
+  color: var(--color-on-surface-variant);
+  font-size: 0.775rem;
+  font-weight: 500;
+  opacity: 0.85;
+  transition: all 0.2s ease;
+}
+
+.reset-2fa-btn:hover:not(:disabled) {
+  color: var(--color-primary);
+  opacity: 1;
+}
+
+.reset-2fa-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
 }
 
 /* ==========================================================================

@@ -13,6 +13,7 @@ export const createFoodSchema = z.object({
   cookingStatus: z.string().optional(),
   image: z.string().optional(),
   spiciness: z.string().optional().default('Medium'),
+  fulfillmentOptions: z.string().optional().default('BOTH'),
   vendorName: z.string().optional(),
   vendorLocation: z.any().optional(),
 }).passthrough();
@@ -26,6 +27,7 @@ export const updateFoodSchema = z.object({
   available: z.boolean().optional(),
   isAvailable: z.boolean().optional(),
   status: z.string().optional(),
+  fulfillmentOptions: z.string().optional(),
   image: z.string().optional(),
   timeReady: z.string().optional(),
   cookingStatus: z.string().optional(),

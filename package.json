@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node backend/server.js",
     "clean-accounts": "node backend/scripts/clearAccounts.js",
-    "cleanup-root": "node backend/scripts/cleanupLegacyRoot.js",
+    "clean-orders": "node backend/scripts/clearOrders.js",
+    "clean-dishes": "node backend/scripts/clearDishes.js",
     "build": "vite build frontend",
     "lint": "vite build frontend",
     "start": "node backend/server.js",

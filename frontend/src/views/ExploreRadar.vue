@@ -214,6 +214,8 @@ function navigateTo(route, payload = null) {
 function openFoodDetail(item) {
   const itemCoords = item.location?.coordinates || [72.9342, 19.1458]
   const distM = calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, itemCoords[1], itemCoords[0])
+  const vRating = item.vendor?.rating !== undefined ? item.vendor.rating : (item.rating !== undefined ? item.rating : 0)
+  const vReviews = item.vendor?.totalReviews !== undefined ? item.vendor.totalReviews : (item.reviews !== undefined ? item.reviews : 0)
   emit('navigate', 'food_details', {
     food: {
       ...item,
@@ -226,7 +228,10 @@ function openFoodDetail(item) {
       createdAt: item.createdAt || null,
       updatedAt: item.updatedAt || null,
       distance: `${distM}m away`,
-      rating: 4.9,
+      rating: vRating,
+      vendorRating: vRating,
+      vendorReviews: vReviews,
+      totalReviews: vReviews,
     }
   })
 }

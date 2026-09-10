@@ -3,36 +3,20 @@ import { foodApi } from '../services/api.js';
 import { getSocket } from '../services/socket.js';
 
 export const useFoodStore = defineStore('food', {
-  state: () => ({
-    foods: [
-      {
-        _id: 'rajma-chawal',
-        id: 'rajma-chawal',
-        name: 'Authentic Rajma Chawal',
-        vendor: {
-          _id: 'v_anjali',
-          businessName: "Anjali's Kitchen",
-          rating: 4.9,
-          totalReviews: 32,
-          pickupAddress: 'Wing B, Flat 402, Green Meadows, Bhandup West, Mumbai',
-        },
-        vendorName: "Anjali's Kitchen",
-        price: 80,
-        quantity: 6,
-        time: 'Ready Now',
-        timeReady: 'Ready Now',
-        distance: '420m away',
-        rating: 4.9,
-        available: true,
-        status: 'AVAILABLE',
-        isVeg: true,
-        image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCcCn3i8k4gYk-jLV5MXuqSONW-8QpGOpQ4yYcs-5HUarOFUR1kCq3boeWmwl-f7Seo8MV5gGPaYolyo8w_lFVLtdBGN11e9huwwnLqF4wUGtqAbHcuebFi79m5evx_bXkagJMfR6xqZSl0A3UhdKsMtGL_SyAxPz6EhwbTtY7oWANHjY08Msx9WdC5GF0cpXi4h-eS9GA4sfMmh7CCZv7Lu_elTf3lY2oNae4dUF5Fxdr0ktu3Ed5C',
-      },
-    ],
-    selectedFood: null,
-    loading: false,
-    initialized: false,
-  }),
+  state: () => {
+    let savedSelected = null;
+    try {
+      const stored = sessionStorage.getItem('foodmap_selected_food');
+      if (stored) savedSelected = JSON.parse(stored);
+    } catch (_) {}
+
+    return {
+      foods: [],
+      selectedFood: savedSelected,
+      loading: false,
+      initialized: false,
+    };
+  },
 
   actions: {
     async fetchFoods(params = {}) {
@@ -57,6 +41,13 @@ export const useFoodStore = defineStore('food', {
 
     selectFood(food) {
       this.selectedFood = food;
+      try {
+        if (food) {
+          sessionStorage.setItem('foodmap_selected_food', JSON.stringify(food));
+        } else {
+          sessionStorage.removeItem('foodmap_selected_food');
+        }
+      } catch (_) {}
     },
 
     async addFood(foodData) {

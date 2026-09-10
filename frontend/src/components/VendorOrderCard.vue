@@ -1,4 +1,6 @@
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   order: {
     type: Object,
@@ -18,7 +20,27 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['complete', 'open-map', 'back-to-dashboard'])
+const emit = defineEmits(['accept', 'cancel', 'complete', 'open-map', 'back-to-dashboard'])
+
+const orderStatus = computed(() => {
+  return String(props.order?.status || 'PENDING').toUpperCase()
+})
+
+const isPending = computed(() => {
+  return orderStatus.value === 'PENDING' || orderStatus.value === 'PLACED'
+})
+
+const isOutForDelivery = computed(() => {
+  return orderStatus.value === 'OUT_FOR_DELIVERY'
+})
+
+function handleAccept() {
+  emit('accept', props.order)
+}
+
+function handleCancel() {
+  emit('cancel', props.order)
+}
 
 function handleComplete() {
   emit('complete', props.order)
@@ -129,16 +151,60 @@ function handleBackToDashboard() {
         <span>Chef Dashboard</span>
       </button>
 
-      <button
-        v-if="showCompleteButton"
-        type="button"
-        @click="handleComplete"
-        :disabled="isUpdating"
-        class="flex-[2] py-3.5 px-4 bg-green-700 hover:bg-green-800 text-white text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 font-bold cursor-pointer disabled:opacity-50"
-      >
-        <span class="material-symbols-outlined text-[18px]">check_circle</span>
-        <span>{{ isUpdating ? 'Updating...' : 'Done with Pickup (Completed)' }}</span>
-      </button>
+      <!-- PENDING STATE: Cancel (Reject with optional reason) & Accept buttons -->
+      <template v-if="isPending">
+        <button
+          type="button"
+          @click="handleCancel"
+          :disabled="isUpdating"
+          class="flex-1 py-3.5 px-4 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 font-bold cursor-pointer disabled:opacity-50"
+        >
+          <span class="material-symbols-outlined text-[18px]">cancel</span>
+          <span>Cancel Order</span>
+        </button>
+
+        <button
+          type="button"
+          @click="handleAccept"
+          :disabled="isUpdating"
+          class="flex-[2] py-3.5 px-4 bg-green-700 hover:bg-green-800 text-white text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 font-bold cursor-pointer disabled:opacity-50"
+        >
+          <span class="material-symbols-outlined text-[18px]">check_circle</span>
+          <span>{{ isUpdating ? 'Accepting...' : 'Accept Order' }}</span>
+        </button>
+      </template>
+
+      <!-- ACCEPTED / DISPATCHED STATE: Out for delivery indicator or Complete button -->
+      <template v-else>
+        <!-- If order is already Sent Out for Delivery, show a clean grey indicator waiting for resident to confirm receipt -->
+        <div
+          v-if="isOutForDelivery"
+          class="flex-[2] py-3.5 px-4 text-xs rounded-xl bg-surface-container-high text-on-surface-variant border border-outline-variant/30 flex items-center justify-center gap-2 font-bold select-none"
+        >
+          <span class="material-symbols-outlined text-[18px] text-primary animate-pulse">hourglass_top</span>
+          <span>Dispatched • Waiting for customer to confirm receipt</span>
+        </div>
+
+        <button
+          v-else-if="showCompleteButton"
+          type="button"
+          @click="handleComplete"
+          :disabled="isUpdating"
+          :class="[
+            order.isDelivery || order.type === 'Direct Delivery'
+              ? 'bg-blue-600 hover:bg-blue-700 text-white'
+              : 'bg-green-700 hover:bg-green-800 text-white',
+            'flex-[2] py-3.5 px-4 text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 font-bold cursor-pointer disabled:opacity-50'
+          ]"
+        >
+          <span class="material-symbols-outlined text-[18px]">
+            {{ (order.isDelivery || order.type === 'Direct Delivery') ? 'local_shipping' : 'check_circle' }}
+          </span>
+          <span>
+            {{ isUpdating ? 'Updating...' : ((order.isDelivery || order.type === 'Direct Delivery') ? 'Sent Out for Delivery' : 'Done with Pickup (Completed)') }}
+          </span>
+        </button>
+      </template>
     </div>
   </div>
 </template>

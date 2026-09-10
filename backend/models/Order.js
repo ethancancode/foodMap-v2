@@ -66,7 +66,9 @@ const orderSchema = new mongoose.Schema(
         'ACCEPTED',
         'PREPARING',
         'READY_FOR_PICKUP',
+        'OUT_FOR_DELIVERY',
         'PICKED_UP',
+        'DELIVERED',
         'COMPLETED',
         'REJECTED',
         'CANCELLED',
@@ -78,9 +80,15 @@ const orderSchema = new mongoose.Schema(
       enum: ['PICKUP', 'DELIVERY'],
       default: 'PICKUP',
     },
+    readyAt: {
+      type: Date,
+    },
+    cookingStatus: {
+      type: String,
+    },
     pickupAddress: {
       type: String,
-      default: 'Bhandup West, Mumbai',
+      default: 'Seawoods, Navi Mumbai',
     },
     pickupTimeEstimate: {
       type: String,
@@ -89,8 +97,26 @@ const orderSchema = new mongoose.Schema(
     rejectionReason: {
       type: String,
     },
+    isViewedByResident: {
+      type: Boolean,
+      default: false,
+    },
     specialInstructions: {
       type: String,
+    },
+    residentLocation: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number], // [lng, lat]
+      },
+      address: {
+        type: String,
+        default: '',
+      },
     },
     timeline: [
       {
@@ -99,6 +125,16 @@ const orderSchema = new mongoose.Schema(
         note: String,
       },
     ],
+    isReviewed: {
+      type: Boolean,
+      default: false,
+    },
+    rating: {
+      type: Number,
+    },
+    reviewComment: {
+      type: String,
+    },
   },
   {
     timestamps: true,

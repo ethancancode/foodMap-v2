@@ -22,3 +22,25 @@ export const verifyOtpSchema = z.object({
   pickupAddress: z.string().optional(),
   coordinates: z.array(z.number()).length(2).optional(),
 }).passthrough();
+
+export const completeOnboardingSchema = z.object({
+  role: z.enum(['resident', 'vendor']).optional(),
+  name: z.string().optional(),
+  residentName: z.string().optional(),
+  gender: z.string().optional(),
+  occupation: z.string().optional(),
+  dietaryPreference: z.string().optional(),
+  radarDistanceLimit: z.number().optional(),
+  avatar: z.string().optional(),
+  chefName: z.string().optional(),
+  kitchenName: z.string().optional(),
+  businessName: z.string().optional(),
+  specialties: z.string().optional(),
+  category: z.string().optional(),
+  pickupAddress: z.string().optional(),
+  coordinates: z.array(z.number()).length(2).optional(),
+  bio: z.string().optional(),
+  experience: z.string().optional(),
+  coverImage: z.string().optional(),
+}).passthrough();
+

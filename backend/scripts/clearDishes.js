@@ -11,37 +11,30 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/foodmap';
 
-async function clearAccounts() {
+async function clearDishes() {
   try {
     console.log(`[FoodMap] Connecting to MongoDB: ${MONGO_URI}...`);
     await mongoose.connect(MONGO_URI);
     console.log('[FoodMap] Connected successfully.');
 
-    // Delete accounts across users, vendors, residents, orders, and food dishes
-    const usersResult = await mongoose.connection.collection('users').deleteMany({});
-    const vendorsResult = await mongoose.connection.collection('vendors').deleteMany({});
-    const residentsResult = await mongoose.connection.collection('residents').deleteMany({});
-    const ordersResult = await mongoose.connection.collection('orders').deleteMany({});
+    // Delete dishes/foods and availability records
     const foodsResult = await mongoose.connection.collection('foods').deleteMany({});
     const availResult = await mongoose.connection.collection('foodavailabilities').deleteMany({}).catch(() => ({ deletedCount: 0 }));
 
     console.log('\n=======================================');
-    console.log('  ACCOUNTS & DISHES SUCCESSFULLY CLEARED');
+    console.log('       DISHES SUCCESSFULLY CLEARED');
     console.log('=======================================');
-    console.log(`- Users deleted:     ${usersResult.deletedCount}`);
-    console.log(`- Vendors deleted:   ${vendorsResult.deletedCount}`);
-    console.log(`- Residents deleted: ${residentsResult.deletedCount}`);
-    console.log(`- Orders deleted:    ${ordersResult.deletedCount}`);
-    console.log(`- Foods deleted:     ${foodsResult.deletedCount}`);
+    console.log(`- Foods deleted:        ${foodsResult.deletedCount}`);
+    console.log(`- Availabilities reset: ${availResult.deletedCount || 0}`);
     console.log('=======================================\n');
-    console.log('You can now test fresh sign-ups and new vendor onboarding!\n');
+    console.log('All old map food items have been cleared.\n');
 
     await mongoose.disconnect();
     process.exit(0);
   } catch (err) {
-    console.error('[FoodMap] Error clearing database accounts:', err.message);
+    console.error('[FoodMap] Error clearing database dishes:', err.message);
     process.exit(1);
   }
 }
 
-clearAccounts();
+clearDishes();

@@ -77,6 +77,20 @@ function initMap() {
 }
 
 watch(
+  () => props.coordinates,
+  (newCoords) => {
+    if (map && marker && newCoords && newCoords.length === 2) {
+      const lng = Number(newCoords[0]) || 73.0188
+      const lat = Number(newCoords[1]) || 19.0225
+      marker.setLatLng([lat, lng])
+      marker.setPopupContent(`<b>${props.residentName}</b><br/>${props.address || 'Live Location'}`)
+      map.panTo([lat, lng], { animate: true, duration: 1 })
+    }
+  },
+  { deep: true }
+)
+
+watch(
   () => props.isOpen,
   (open) => {
     if (open) {

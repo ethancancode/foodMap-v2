@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { orderApi, vendorApi } from '../services/api.js'
+import { onLocationUpdated } from '../services/socket.js'
 import ResidentLocationModal from '../components/ResidentLocationModal.vue'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
@@ -16,6 +17,8 @@ const emit = defineEmits(['navigate', 'action', 'role-switch'])
 const vendorProfile = ref(null)
 const isUpdating = ref(false)
 const isMapModalOpen = ref(false)
+const liveResidentLocation = ref(null)
+let unsubLocation = null
 
 onMounted(async () => {
   try {
@@ -26,6 +29,21 @@ onMounted(async () => {
   } catch (e) {
     // ignore
   }
+
+  // Real-time listener for resident moving
+  unsubLocation = onLocationUpdated((data) => {
+    const o = props.order || {}
+    const residentId = o.resident?._id || o.resident?.id || o.resident
+    if (data.userId && residentId && String(data.userId) === String(residentId)) {
+      if (data.location) {
+        liveResidentLocation.value = data.location
+      }
+    }
+  })
+})
+
+onUnmounted(() => {
+  if (unsubLocation) unsubLocation()
 })
 
 const kitchenDisplayName = computed(() => {
@@ -35,8 +53,8 @@ const kitchenDisplayName = computed(() => {
 const orderData = computed(() => {
   const o = props.order || {}
   const residentObj = o.resident || {}
-  const coords = residentObj.location?.coordinates || o.location?.coordinates || o.residentCoordinates || [73.0188, 19.0225]
-  const address = residentObj.location?.address || o.pickupAddress || o.location?.address || o.deliveryAddress || 'Seawoods, Navi Mumbai'
+  const coords = liveResidentLocation.value?.coordinates || o.residentLocation?.coordinates || residentObj.location?.coordinates || o.location?.coordinates || o.residentCoordinates || [73.0188, 19.0225]
+  const address = liveResidentLocation.value?.address || o.residentLocation?.address || residentObj.location?.address || o.pickupAddress || o.location?.address || o.deliveryAddress || 'Current Live Location'
   const customerName = o.residentName || o.customer || residentObj.name || 'Resident'
   const customerPhone = o.residentPhone || o.customerPhone || residentObj.phone || ''
 

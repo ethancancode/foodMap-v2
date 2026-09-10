@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { orderApi, vendorApi } from '../services/api.js'
-import { onNewIncomingOrder, onOrderStatusChanged } from '../services/socket.js'
+import { onNewIncomingOrder, onOrderStatusChanged, subscribeToVendor } from '../services/socket.js'
 import { useOrderStore } from '../stores/orderStore.js'
 
 const props = defineProps({
@@ -42,9 +42,14 @@ let unsubNew, unsubStatus
 
 async function fetchPendingCount() {
   try {
-    const res = await orderApi.getOrders().catch(() => null)
+    const vendorId = props.vendorProfile?._id || props.vendorProfile?.id || props.user?.vendor?._id || props.user?.vendor?.id || (isVendor.value ? props.user?.vendor : null)
+    if (isVendor.value && vendorId) {
+      subscribeToVendor(vendorId)
+    }
+    const params = isVendor.value && vendorId ? { vendor: vendorId } : {}
+    const res = await orderApi.getOrders(params).catch(() => null)
     const orders = res?.orders || res?.data || []
-    const ACTIVE_STATUSES = ['pending', 'placed', 'accepted', 'preparing', 'ready_for_pickup']
+    const ACTIVE_STATUSES = ['pending', 'placed', 'accepted', 'preparing', 'ready_for_pickup', 'ready']
     const active = (orders || []).filter((o) =>
       ACTIVE_STATUSES.includes((o.status || '').toLowerCase())
     )
@@ -60,6 +65,11 @@ async function fetchPendingCount() {
 onMounted(() => {
   fetchPendingCount()
   unsubNew = onNewIncomingOrder((order) => {
+    const vendorId = props.vendorProfile?._id || props.vendorProfile?.id || props.user?.vendor?._id || props.user?.vendor?.id || props.user?.vendor
+    const orderVendorId = order.vendor?._id || order.vendor?.id || order.vendor
+    if (isVendor.value && vendorId && orderVendorId && String(vendorId) !== String(orderVendorId)) {
+      return
+    }
     internalPendingCount.value += 1
     if (orderStore && order) {
       orderStore.orders.unshift(order)
@@ -71,7 +81,7 @@ onMounted(() => {
 })
 
 watch(() => props.pendingOrdersCount, (newVal) => {
-  if (newVal !== undefined && newVal !== null && newVal > 0) {
+  if (newVal !== undefined && newVal !== null) {
     internalPendingCount.value = newVal
   }
 })
@@ -82,11 +92,8 @@ onUnmounted(() => {
 })
 
 const effectivePendingOrdersCount = computed(() => {
-  if (props.pendingOrdersCount !== undefined && props.pendingOrdersCount !== null && Number(props.pendingOrdersCount) > 0) {
+  if (props.pendingOrdersCount !== undefined && props.pendingOrdersCount !== null) {
     return Number(props.pendingOrdersCount)
-  }
-  if (orderStore.pendingOrdersCount > 0) {
-    return orderStore.pendingOrdersCount
   }
   return internalPendingCount.value
 })
@@ -142,10 +149,10 @@ const navItems = computed(() => {
   if (!isGuest.value) {
     base.push(
       {
-        id: 'order_status',
+        id: 'resident_orders',
         label: 'Orders',
         icon: 'receipt_long',
-        route: 'order_status',
+        route: 'resident_orders',
       },
       {
         id: 'resident_profile',

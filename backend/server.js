@@ -6,7 +6,6 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
 import { connectDB } from './config/database.js';
-import { seedInitialData } from './config/seed.js';
 import { initializeSocket } from './sockets/socket.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 
@@ -59,10 +58,8 @@ try {
   // Ignore permission or file lock errors
 }
 
-// Connect to MongoDB Atlas and seed
-connectDB().then(() => {
-  seedInitialData();
-});
+// Connect to MongoDB Atlas
+connectDB();
 
 // API Routes
 app.use('/api/auth', authRoutes);

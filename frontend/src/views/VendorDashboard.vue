@@ -7,7 +7,10 @@ import {
   onFoodUpdated,
   onFoodDeleted,
   onNewIncomingOrder,
-  onOrderStatusChanged
+  onOrderStatusChanged,
+  onVendorUpdated,
+  onVendorReviewAdded,
+  subscribeToVendor
 } from '../services/socket.js'
 import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
 import AppSidebar from '../components/AppSidebar.vue'
@@ -77,7 +80,7 @@ function openLatestOrder() {
   }
 }
 
-let unsubAvail, unsubNewOrder, unsubOrderStatus, unsubFoodNew, unsubFoodDel
+let unsubAvail, unsubNewOrder, unsubOrderStatus, unsubFoodNew, unsubFoodDel, unsubVendor, unsubReview
 
 async function loadVendorData() {
   try {
@@ -86,10 +89,13 @@ async function loadVendorData() {
     if (myVendorRes?.vendor) {
       vendorProfile.value = myVendorRes.vendor
     }
-    const vendorId = vendorProfile.value?._id || vendorProfile.value?.id
+    const vendorId = vendorProfile.value?._id || vendorProfile.value?.id || props.user?.vendor?._id || props.user?.vendor?.id || props.user?.vendor
+    if (vendorId) {
+      subscribeToVendor(vendorId)
+    }
 
     const [foodsRes, ordersRes] = await Promise.all([
-      vendorId ? foodApi.getFoods({ vendor: vendorId }) : { foods: [] },
+      vendorId ? foodApi.getFoods({ vendor: vendorId }) : foodApi.getFoods(),
       vendorId ? orderApi.getOrders({ vendor: vendorId }).catch(() => null) : orderApi.getOrders().catch(() => null)
     ])
 
@@ -100,7 +106,7 @@ async function loadVendorData() {
       isAvailable: isItemAvailable(item)
     }))
     let orders = ordersRes?.orders || ordersRes?.data || []
-    const ACTIVE_STATUSES = ['pending', 'placed', 'accepted', 'preparing', 'ready_for_pickup']
+    const ACTIVE_STATUSES = ['pending', 'placed', 'accepted', 'preparing', 'ready_for_pickup', 'ready']
     incomingOrders.value = (orders || [])
       .filter((o) => ACTIVE_STATUSES.includes((o.status || '').toLowerCase()))
       .sort((a, b) => new Date(b.createdAt || Date.now()) - new Date(a.createdAt || Date.now()))
@@ -128,7 +134,7 @@ onMounted(async () => {
 
   // Real-time listener: New incoming order from resident
   unsubNewOrder = onNewIncomingOrder((newOrder) => {
-    const vendorId = vendorProfile.value?._id || vendorProfile.value?.id
+    const vendorId = vendorProfile.value?._id || vendorProfile.value?.id || props.user?.vendor?._id || props.user?.vendor?.id || props.user?.vendor
     const orderVendorId = newOrder.vendor?._id || newOrder.vendor?.id || newOrder.vendor
     if (vendorId && orderVendorId && String(vendorId) !== String(orderVendorId)) {
       return
@@ -174,6 +180,31 @@ onMounted(async () => {
   unsubFoodDel = onFoodDeleted((data) => {
     listings.value = listings.value.filter((f) => f._id !== data.foodId)
   })
+
+  // Real-time listener: Vendor rating or profile updated
+  unsubVendor = onVendorUpdated((data) => {
+    const updated = data.vendor || data
+    const myId = vendorProfile.value?._id || vendorProfile.value?.id
+    if (updated && (updated._id === myId || updated.id === myId)) {
+      vendorProfile.value = { ...vendorProfile.value, ...updated }
+    }
+  })
+
+  // Real-time listener: New Review submitted by resident
+  unsubReview = onVendorReviewAdded((data) => {
+    const myId = vendorProfile.value?._id || vendorProfile.value?.id
+    if (data && String(data.vendorId) === String(myId)) {
+      if (data.vendor) {
+        vendorProfile.value = { ...vendorProfile.value, ...data.vendor }
+      }
+      emit('action', {
+        action: 'toast',
+        payload: {
+          message: `⭐ New Review Received! ${data.review?.userName || 'A neighbor'} rated your kitchen ${data.review?.rating || 5} ★`
+        }
+      })
+    }
+  })
 })
 
 onUnmounted(() => {
@@ -182,6 +213,8 @@ onUnmounted(() => {
   if (unsubOrderStatus) unsubOrderStatus()
   if (unsubFoodNew) unsubFoodNew()
   if (unsubFoodDel) unsubFoodDel()
+  if (unsubVendor) unsubVendor()
+  if (unsubReview) unsubReview()
 })
 
 function navigateTo(route, payload = null) {
@@ -339,10 +372,23 @@ function handleToast(message) {
                     <p class="text-xs text-on-surface-variant">
                       Managing {{ vendorProfile?.businessName || props.user?.vendor?.businessName || "Priya Kitchen" }}<template v-if="vendorProfile?.location?.pickupAddress"> • {{ vendorProfile.location.pickupAddress }}</template>
                     </p>
-                    <span v-if="vendorProfile?.experience" class="text-[11px] bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-md inline-flex items-center gap-1">
-                      <span class="material-symbols-outlined text-[13px]">military_tech</span>
-                      {{ vendorProfile.experience }}
-                    </span>
+                    <span class="text-xs text-on-surface-variant/40 hidden sm:inline">•</span>
+                    <!-- Dynamic Star Rating & Review Badge -->
+                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-2xs cursor-pointer hover:bg-amber-500/15 transition-all"
+                      :class="[
+                        (vendorProfile?.totalReviews && vendorProfile.totalReviews > 0)
+                          ? 'bg-amber-500/10 text-amber-600 border border-amber-500/25'
+                          : 'bg-surface-container text-on-surface-variant border border-outline-variant/30'
+                      ]"
+                      @click="navigateTo('vendor_profile')"
+                      title="View customer reviews in profile"
+                    >
+                      <span class="material-symbols-outlined text-[15px] text-amber-500" style="font-variation-settings: 'FILL' 1;">star</span>
+                      <span v-if="vendorProfile?.totalReviews && vendorProfile.totalReviews > 0">
+                        {{ vendorProfile.rating ? vendorProfile.rating.toFixed(1) : '5.0' }} ({{ vendorProfile.totalReviews }} review{{ vendorProfile.totalReviews > 1 ? 's' : '' }})
+                      </span>
+                      <span v-else>New Kitchen</span>
+                    </div>
                   </div>
                 </div>
                 <div class="flex gap-2 w-full sm:w-auto">
@@ -357,8 +403,8 @@ function handleToast(message) {
                 </div>
               </div>
 
-              <!-- Incoming Orders Notification Bar (only shown when there are active, non-completed orders AND active dishes) -->
-              <section v-if="activeOrdersList.length > 0 && listings.length > 0" class="w-full bg-surface-container-lowest border border-primary/25 rounded-3xl p-4 sm:p-5 shadow-sm space-y-3">
+              <!-- Incoming Orders Notification Bar (shown whenever there are active, non-completed orders) -->
+              <section v-if="activeOrdersList.length > 0" class="w-full bg-surface-container-lowest border border-primary/25 rounded-3xl p-4 sm:p-5 shadow-sm space-y-3">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2.5">
                     <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0">

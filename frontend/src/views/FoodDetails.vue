@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { onFoodAvailabilityUpdated } from '../services/socket.js'
 import { foodApi } from '../services/api.js'
 import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
 
@@ -78,7 +79,9 @@ watch(
 
 // Haversine distance calculator in meters
 function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 400
+  if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined || lat1 === null || lon1 === null || lat2 === null || lon2 === null) {
+    return 0
+  }
   const R = 6371e3 // metres
   const φ1 = (lat1 * Math.PI) / 180
   const φ2 = (lat2 * Math.PI) / 180
@@ -102,14 +105,17 @@ const userCoords = computed(() => {
       lat: props.user.location.coordinates[1]
     }
   }
-  return { lng: 73.0188, lat: 19.0225 }
+  return null
 })
 
 const foodItem = computed(() => {
   const src = fetchedFood.value || props.food || {}
-  const coords = src.location?.coordinates || src.vendor?.location?.coordinates || [73.0188, 19.0225]
-  const distM = calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, coords[1], coords[0])
-  const formattedDist = distM >= 1000 ? `${(distM / 1000).toFixed(1)}km away` : `${distM}m away`
+  const coords = src.location?.coordinates || src.vendor?.location?.coordinates
+  let distM = 0
+  if (userCoords.value && coords) {
+    distM = calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, coords[1], coords[0])
+  }
+  const formattedDist = distM <= 50 ? 'Same Location' : (distM >= 1000 ? `${(distM / 1000).toFixed(1)}km away` : `${distM}m away`)
 
   const vName = src.vendorName || (typeof src.vendor === 'object' && src.vendor?.businessName) || (typeof src.vendor === 'string' && src.vendor) || "Home Chef's Kitchen"
   const vAddr = src.pickupAddress || src.location?.pickupAddress || (typeof src.vendor === 'object' && src.vendor?.location?.pickupAddress) || (typeof src.vendor === 'object' && src.vendor?.pickupAddress) || 'Seawoods, Navi Mumbai'
@@ -133,13 +139,16 @@ const foodItem = computed(() => {
     createdAt: src.createdAt || null,
     updatedAt: src.updatedAt || null,
     distance: formattedDist,
+    distanceMeters: distM,
+    location: src.location || src.vendor?.location || null,
     pickupAddress: vAddr,
     vendorName: vName,
     vendorRating: vRating,
     vendorReviews: vReviews,
     vendorId: src.vendorId || src.vendor?._id || (typeof src.vendor === 'string' ? src.vendor : null),
+    fulfillmentOptions: src.fulfillmentOptions || 'BOTH',
     description: src.desc || src.description || 'Authentic homestyle delicacy freshly prepared with traditional spices.',
-    image: src.image || 'https://lh3.googleusercontent.com/aida-public/AB6AXuCcCn3i8k4gYk-jLV5MXuqSONW-8QpGOpQ4yYcs-5HUarOFUR1kCq3boeWmwl-f7Seo8MV5gGPaYolyo8w_lFVLtdBGN11e9huwwnLqF4wUGtqAbHcuebFi79m5evx_bXkagJMfR6xqZSl0A3UhdKsMtGL_SyAxPz6EhwbTtY7oWANHjY08Msx9WdC5GF0cpXi4h-eS9GA4sfMmh7CCZv7Lu_elTf3lY2oNae4dUF5Fxdr0ktu3Ed5C'
+    image: src.image || DEFAULT_FOOD_SVG
   }
 })
 
@@ -236,6 +245,14 @@ function reservePortion() {
                   <span class="font-label-md text-xs font-bold font-mono" :class="countdown(foodItem).isReady ? 'text-green-700' : 'text-amber-800'">
                     {{ countdown(foodItem).text }}
                   </span>
+                </div>
+                <div v-if="foodItem.fulfillmentOptions === 'PICKUP_ONLY'" class="bg-surface/95 backdrop-blur-md px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-amber-300 text-amber-900 font-bold text-xs">
+                  <span class="material-symbols-outlined text-sm text-amber-600">storefront</span>
+                  <span>Pickup Only</span>
+                </div>
+                <div v-else-if="foodItem.fulfillmentOptions === 'DELIVERY_ONLY'" class="bg-surface/95 backdrop-blur-md px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 border border-blue-300 text-blue-900 font-bold text-xs">
+                  <span class="material-symbols-outlined text-sm text-blue-600">directions_bike</span>
+                  <span>Delivery Only</span>
                 </div>
               </div>
 

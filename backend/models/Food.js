@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js';
 
 const foodSchema = new mongoose.Schema(
   {
@@ -62,9 +63,14 @@ const foodSchema = new mongoose.Schema(
       type: String,
       default: 'AVAILABLE',
     },
+    fulfillmentOptions: {
+      type: String,
+      enum: ['BOTH', 'PICKUP_ONLY', 'DELIVERY_ONLY'],
+      default: 'BOTH',
+    },
     image: {
       type: String,
-      default: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCcCn3i8k4gYk-jLV5MXuqSONW-8QpGOpQ4yYcs-5HUarOFUR1kCq3boeWmwl-f7Seo8MV5gGPaYolyo8w_lFVLtdBGN11e9huwwnLqF4wUGtqAbHcuebFi79m5evx_bXkagJMfR6xqZSl0A3UhdKsMtGL_SyAxPz6EhwbTtY7oWANHjY08Msx9WdC5GF0cpXi4h-eS9GA4sfMmh7CCZv7Lu_elTf3lY2oNae4dUF5Fxdr0ktu3Ed5C',
+      default: DEFAULT_FOOD_SVG,
     },
     spiciness: {
       type: String,

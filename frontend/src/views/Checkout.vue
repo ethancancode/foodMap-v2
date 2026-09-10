@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { orderApi } from '../services/api.js'
 import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
 
@@ -43,7 +44,9 @@ onMounted(() => {
 })
 
 function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 500
+  if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined || lat1 === null || lon1 === null || lat2 === null || lon2 === null) {
+    return 0
+  }
   const R = 6371e3
   const φ1 = (lat1 * Math.PI) / 180
   const φ2 = (lat2 * Math.PI) / 180
@@ -70,13 +73,62 @@ const userCoords = computed(() => {
 
 const distanceMeters = computed(() => {
   const f = props.food || {}
-  const coords = f.location?.coordinates || f.vendor?.location?.coordinates || [73.0188, 19.0225]
-  return calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, coords[1], coords[0])
+  // If explicitly passed from FoodDetails
+  if (f.distanceMeters !== undefined && f.distanceMeters !== null && f.distanceMeters > 0) {
+    return Number(f.distanceMeters)
+  }
+  // If distance string was passed (e.g. "2.2km away" or "450m away")
+  if (typeof f.distance === 'string') {
+    const kmMatch = f.distance.match(/([\d.]+)\s*km/i)
+    if (kmMatch) return Math.round(parseFloat(kmMatch[1]) * 1000)
+    const mMatch = f.distance.match(/(\d+)\s*m/i)
+    if (mMatch) return parseInt(mMatch[1], 10)
+  }
+
+  const coords = f.location?.coordinates || f.vendor?.location?.coordinates
+  if (coords && userCoords.value) {
+    return calculateDistanceMeters(userCoords.value.lat, userCoords.value.lng, coords[1], coords[0])
+  }
+  return 2000
 })
+
+// Vendor fulfillment options: 'BOTH' | 'PICKUP_ONLY' | 'DELIVERY_ONLY'
+const vendorFulfillment = computed(() => {
+  return props.food?.fulfillmentOptions || 'BOTH'
+})
+
+const isPickupAllowed = computed(() => {
+  return vendorFulfillment.value !== 'DELIVERY_ONLY'
+})
+
+const isDeliveryAllowedByVendor = computed(() => {
+  return vendorFulfillment.value !== 'PICKUP_ONLY'
+})
+
+// Disable delivery if within 100m OR if vendor explicitly restricted to pickup only
+const isDeliveryDisabled = computed(() => {
+  if (!isDeliveryAllowedByVendor.value) return true
+  return distanceMeters.value > 0 && distanceMeters.value <= 100
+})
+
+const deliveryDisabledReason = computed(() => {
+  if (!isDeliveryAllowedByVendor.value) return 'Pickup only (Cook selected)'
+  if (distanceMeters.value > 0 && distanceMeters.value <= 100) return 'Within 100m (Pickup only)'
+  return ''
+})
+
+// Adjust fulfillment mode if currently invalid
+watch([vendorFulfillment, isDeliveryDisabled], () => {
+  if (!isPickupAllowed.value && fulfillment.value === 'pickup') {
+    fulfillment.value = 'delivery'
+  } else if (isDeliveryDisabled.value && fulfillment.value === 'delivery') {
+    fulfillment.value = 'pickup'
+  }
+}, { immediate: true })
 
 // ₹6 per 500m (min ₹10 base fee)
 const calculatedDeliveryFee = computed(() => {
-  const dist = distanceMeters.value || 500
+  const dist = distanceMeters.value || 0
   return Math.max(10, Math.ceil(dist / 500) * 6)
 })
 
@@ -89,7 +141,7 @@ const countdown = computed(() => {
 
 // Travel time: 500m per minute + remaining cooking time
 const estDeliveryMinutes = computed(() => {
-  const dist = distanceMeters.value || 500
+  const dist = distanceMeters.value || 0
   const travelMins = Math.max(3, Math.ceil(dist / 500))
   const cookMins = countdown.value.isReady ? 0 : (countdown.value.remainingMinutes || 10)
   return cookMins + travelMins
@@ -110,7 +162,9 @@ watch(
   () => props.food,
   (newFood) => {
     if (newFood) {
-      quantity.value = newFood.quantity || 1
+      // Prioritize explicit selected quantity, or 1
+      const chosenQty = newFood.selectedQty || newFood.quantity || 1
+      quantity.value = chosenQty
       errorMessage.value = ''
     }
   },
@@ -125,7 +179,7 @@ const vendorName = computed(() => {
   if (typeof v === 'string') return v
   return v?.businessName || v?.name || "Chef's Kitchen"
 })
-const itemImage = computed(() => props.food?.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600')
+const itemImage = computed(() => props.food?.image || DEFAULT_FOOD_SVG)
 const maxAvailable = computed(() => props.food?.portions || props.food?.quantity || 10)
 
 const itemSubtotal = computed(() => quantity.value * itemPrice.value)
@@ -141,14 +195,20 @@ async function processPayment() {
   errorMessage.value = ''
 
   try {
+    const targetVendorId = props.food?.vendorId || props.food?.vendor?._id || props.food?.vendor?.id || (typeof props.food?.vendor === 'string' ? props.food.vendor : null)
+
     const payload = {
       foodId: foodId.value,
+      vendorId: targetVendorId,
       quantity: quantity.value,
       orderType: fulfillment.value === 'delivery' ? 'DELIVERY' : 'PICKUP',
       fulfillment: fulfillment.value,
       residentName: props.user?.name || 'Resident',
       residentPhone: props.user?.phone || '',
       specialInstructions: specialInstructions.value,
+      readyAt: props.food?.readyAt || null,
+      cookingStatus: props.food?.cookingStatus || props.food?.timeReady || props.food?.time || 'Ready now',
+      timeReady: props.food?.timeReady || props.food?.cookingStatus || props.food?.time || 'Ready now',
       residentLocation: props.user?.location?.coordinates
         ? props.user.location
         : { type: 'Point', coordinates: [userCoords.value.lng, userCoords.value.lat] }
@@ -171,6 +231,8 @@ async function processPayment() {
           item: orderObj.foodName || orderObj.itemSummary || itemName.value,
           vendor: finalVendor,
           vendorName: finalVendor,
+          vendorLocation: orderObj.vendor?.location || props.food?.location || props.food?.vendor?.location,
+          location: orderObj.vendor?.location || props.food?.location || props.food?.vendor?.location,
           qty: orderObj.quantity || quantity.value,
           pricePerPortion: orderObj.pricePerUnit || itemPrice.value,
           deliveryFee: deliveryFee.value,
@@ -178,6 +240,7 @@ async function processPayment() {
           total: orderObj.totalAmount || grandTotal.value,
           fulfillment: fulfillment.value,
           address: orderObj.pickupAddress || pickupAddress.value,
+          pickupAddress: orderObj.pickupAddress || pickupAddress.value,
           status: orderObj.status || 'PENDING',
           time: new Date(orderObj.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
@@ -246,9 +309,9 @@ async function processPayment() {
                         <span>{{ pickupAddress }}</span>
                       </div>
                     </div>
-                    <div class="text-right bg-surface/95 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-md">
-                      <span class="text-lg text-primary font-black">₹{{ itemPrice }}</span>
-                      <span class="block text-[10px] text-on-surface-variant font-medium">per portion</span>
+                    <div class="text-center flex flex-col items-center justify-center bg-surface/95 backdrop-blur-md px-3.5 py-1.5 rounded-xl shadow-md shrink-0">
+                      <span class="text-lg text-primary font-black leading-tight">₹{{ itemPrice }}</span>
+                      <span class="block text-[10px] text-on-surface-variant font-medium leading-tight mt-0.5">per portion</span>
                     </div>
                   </div>
                 </div>
@@ -285,27 +348,47 @@ async function processPayment() {
                   <div class="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      @click="fulfillment = 'pickup'"
-                      :class="fulfillment === 'pickup' ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-outline-variant/30 hover:bg-surface-container'"
-                      class="p-3 rounded-xl border flex flex-col items-center gap-1 transition-all text-center cursor-pointer"
+                      :disabled="!isPickupAllowed"
+                      @click="isPickupAllowed && (fulfillment = 'pickup')"
+                      :class="[
+                        !isPickupAllowed
+                          ? 'opacity-50 cursor-not-allowed border-outline-variant/20 bg-surface-container/50'
+                          : (fulfillment === 'pickup' ? 'border-primary bg-primary/10 ring-2 ring-primary/20 cursor-pointer' : 'border-outline-variant/30 hover:bg-surface-container cursor-pointer'),
+                        'p-3 rounded-xl border flex flex-col items-center gap-1 transition-all text-center relative'
+                      ]"
                     >
                       <span class="material-symbols-outlined text-[24px]" :class="fulfillment === 'pickup' ? 'text-primary' : 'text-on-surface-variant'">storefront</span>
                       <span class="text-xs font-bold" :class="fulfillment === 'pickup' ? 'text-primary' : 'text-on-surface'">Self Pickup</span>
                       <span class="text-[10px] text-on-surface-variant font-medium">
-                        {{ countdown.isReady ? 'Ready for pickup (Free)' : `Ready in ${countdown.text} (Free)` }}
+                        <template v-if="!isPickupAllowed">
+                          Delivery only (Cook selected)
+                        </template>
+                        <template v-else>
+                          {{ countdown.isReady ? 'Ready for pickup (Free)' : `Ready in ${countdown.text} (Free)` }}
+                        </template>
                       </span>
                     </button>
 
                     <button
                       type="button"
-                      @click="fulfillment = 'delivery'"
-                      :class="fulfillment === 'delivery' ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-outline-variant/30 hover:bg-surface-container'"
-                      class="p-3 rounded-xl border flex flex-col items-center gap-1 transition-all text-center cursor-pointer"
+                      :disabled="isDeliveryDisabled"
+                      @click="!isDeliveryDisabled && (fulfillment = 'delivery')"
+                      :class="[
+                        isDeliveryDisabled
+                          ? 'opacity-50 cursor-not-allowed border-outline-variant/20 bg-surface-container/50'
+                          : (fulfillment === 'delivery' ? 'border-primary bg-primary/10 ring-2 ring-primary/20 cursor-pointer' : 'border-outline-variant/30 hover:bg-surface-container cursor-pointer'),
+                        'p-3 rounded-xl border flex flex-col items-center gap-1 transition-all text-center relative'
+                      ]"
                     >
                       <span class="material-symbols-outlined text-[24px]" :class="fulfillment === 'delivery' ? 'text-primary' : 'text-on-surface-variant'">directions_bike</span>
                       <span class="text-xs font-bold" :class="fulfillment === 'delivery' ? 'text-primary' : 'text-on-surface'">Direct Delivery</span>
                       <span class="text-[10px] text-on-surface-variant font-medium">
-                        Est. {{ estDeliveryMinutes }}m (+₹{{ calculatedDeliveryFee }})
+                        <template v-if="isDeliveryDisabled">
+                          {{ deliveryDisabledReason }}
+                        </template>
+                        <template v-else>
+                          Est. {{ estDeliveryMinutes }}m (+₹{{ calculatedDeliveryFee }})
+                        </template>
                       </span>
                     </button>
                   </div>

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Food from '../models/Food.js';
 import FoodAvailability from '../models/FoodAvailability.js';
 import Vendor from '../models/Vendor.js';
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js';
 
 export async function getAllFoods(filters = {}) {
   const query = {};
@@ -25,7 +26,8 @@ export async function getAllFoods(filters = {}) {
     .populate('vendor', 'businessName category rating totalReviews status location pickupAddress coverImage')
     .sort({ createdAt: -1 });
 
-  return foods;
+  // Filter out any orphaned food dishes where the vendor account was deleted
+  return foods.filter(f => f.vendor != null);
 }
 
 export async function getFoodById(id) {
@@ -88,8 +90,9 @@ function calculateReadyAt(statusText, explicitReadyAt) {
     timeReady: data.timeReady || cookingStatus,
     cookingStatus,
     readyAt,
-    image: data.image || 'https://lh3.googleusercontent.com/aida-public/AB6AXuCcCn3i8k4gYk-jLV5MXuqSONW-8QpGOpQ4yYcs-5HUarOFUR1kCq3boeWmwl-f7Seo8MV5gGPaYolyo8w_lFVLtdBGN11e9huwwnLqF4wUGtqAbHcuebFi79m5evx_bXkagJMfR6xqZSl0A3UhdKsMtGL_SyAxPz6EhwbTtY7oWANHjY08Msx9WdC5GF0cpXi4h-eS9GA4sfMmh7CCZv7Lu_elTf3lY2oNae4dUF5Fxdr0ktu3Ed5C',
+    image: data.image || DEFAULT_FOOD_SVG,
     spiciness: data.spiciness || 'Medium',
+    fulfillmentOptions: data.fulfillmentOptions || 'BOTH',
     location,
     pickupAddress,
     vendor: vendor._id,

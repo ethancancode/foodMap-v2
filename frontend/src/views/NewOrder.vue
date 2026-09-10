@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { orderApi, vendorApi } from '../services/api.js'
-import { onNewIncomingOrder, onOrderStatusChanged } from '../services/socket.js'
+import { onNewIncomingOrder, onOrderStatusChanged, onLocationUpdated, subscribeToVendor } from '../services/socket.js'
 import ResidentLocationModal from '../components/ResidentLocationModal.vue'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
@@ -29,11 +29,17 @@ const mapCoordinates = ref([73.0188, 19.0225])
 const mapResidentName = ref('')
 const mapAddress = ref('')
 
-// Filter active (pending, accepted, preparing, ready_for_pickup)
+// Cancel modal state
+const isCancelModalOpen = ref(false)
+const cancelTargetOrder = ref(null)
+const cancelReason = ref('')
+const isCancelling = ref(false)
+
+// Filter active (pending, accepted, preparing, ready_for_pickup, out_for_delivery)
 const activeOrders = computed(() => {
   return allOrders.value.filter((o) => {
     const s = (o.status || '').toLowerCase()
-    return s !== 'completed' && s !== 'cancelled' && s !== 'rejected'
+    return s !== 'completed' && s !== 'cancelled' && s !== 'rejected' && s !== 'delivered'
   })
 })
 
@@ -41,17 +47,19 @@ const activeOrders = computed(() => {
 const completedOrders = computed(() => {
   return allOrders.value.filter((o) => {
     const s = (o.status || '').toLowerCase()
-    return s === 'completed'
+    return s === 'completed' || s === 'delivered'
   })
 })
 
 function formatOrder(o) {
   if (!o) return null
   const residentObj = o.resident || {}
-  const coords = residentObj.location?.coordinates || o.location?.coordinates || o.residentCoordinates || [73.0188, 19.0225]
-  const address = residentObj.location?.address || o.pickupAddress || o.location?.address || o.deliveryAddress || 'Seawoods, Navi Mumbai'
+  const coords = o.liveCoordinates || o.residentLocation?.coordinates || residentObj.location?.coordinates || o.location?.coordinates || o.residentCoordinates || [73.0188, 19.0225]
+  const address = o.liveAddress || o.residentLocation?.address || residentObj.location?.address || o.deliveryAddress || o.location?.address || o.pickupAddress || 'Current Live Location'
   const customerName = o.residentName || o.customer || residentObj.name || 'Neighbor'
   const customerPhone = o.residentPhone || o.customerPhone || residentObj.phone || ''
+
+  const isDelivery = String(o.orderType || o.fulfillment || '').toUpperCase() === 'DELIVERY' || o.deliveryFee > 0
 
   return {
     _id: o._id,
@@ -61,7 +69,8 @@ function formatOrder(o) {
     customerPhone: customerPhone,
     qty: o.quantity || o.qty || (o.items?.[0]?.quantity) || 1,
     price: o.totalAmount || o.price || 0,
-    type: o.pickupAddress ? 'Self Pickup' : (o.type || 'Self Pickup'),
+    type: isDelivery ? 'Direct Delivery' : 'Self Pickup',
+    isDelivery,
     status: o.status || 'placed',
     time: new Date(o.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     date: new Date(o.createdAt || Date.now()).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
@@ -80,7 +89,7 @@ const currentOrder = computed(() => {
   return null
 })
 
-let unsubNew, unsubStatus
+let unsubNew, unsubStatus, unsubLocation
 
 async function loadAllOrders() {
   try {
@@ -89,6 +98,9 @@ async function loadAllOrders() {
       vendorProfile.value = myVendorRes.vendor
     }
     const vendorId = vendorProfile.value?._id || vendorProfile.value?.id
+    if (vendorId) {
+      subscribeToVendor(vendorId)
+    }
 
     const res = vendorId ? await orderApi.getOrders({ vendor: vendorId }).catch(() => null) : { orders: [] }
     let fetched = res?.orders || res?.data || []
@@ -122,11 +134,23 @@ onMounted(async () => {
       allOrders.value[idx].status = data.status
     }
   })
+
+  unsubLocation = onLocationUpdated((data) => {
+    if (!data.userId || !data.location) return
+    allOrders.value.forEach((order) => {
+      const resId = order.resident?._id || order.resident?.id || order.resident
+      if (resId && String(resId) === String(data.userId)) {
+        order.liveCoordinates = data.location.coordinates
+        order.liveAddress = data.location.address
+      }
+    })
+  })
 })
 
 onUnmounted(() => {
   if (unsubNew) unsubNew()
   if (unsubStatus) unsubStatus()
+  if (unsubLocation) unsubLocation()
 })
 
 function openLocationMap(orderItem = null) {
@@ -138,15 +162,80 @@ function openLocationMap(orderItem = null) {
   isMapModalOpen.value = true
 }
 
+async function handleAcceptOrder(orderObj = null) {
+  const target = orderObj || currentOrder.value
+  if (!target || isUpdating.value) return
+  isUpdating.value = true
+  const targetId = target._id || target.id
+
+  try {
+    if (targetId) {
+      await orderApi.updateStatus(targetId, 'accepted', 'Kitchen accepted order')
+    }
+    const idx = allOrders.value.findIndex(
+      (o) => o._id === target._id || o.orderNumber === target.id || o.id === target.id
+    )
+    if (idx !== -1) {
+      allOrders.value[idx].status = 'ACCEPTED'
+    }
+    emit('action', {
+      action: 'toast',
+      payload: { message: `👨‍🍳 Order #${target.id} accepted!` }
+    })
+  } catch (err) {
+    console.error('Failed to accept order:', err)
+  } finally {
+    isUpdating.value = false
+  }
+}
+
+function promptCancelOrder(orderObj = null) {
+  cancelTargetOrder.value = orderObj || currentOrder.value
+  cancelReason.value = ''
+  isCancelModalOpen.value = true
+}
+
+async function submitCancelOrder() {
+  if (!cancelTargetOrder.value || isCancelling.value) return
+  isCancelling.value = true
+  const target = cancelTargetOrder.value
+  const targetId = target._id || target.id
+  const reasonText = cancelReason.value.trim() || 'Kitchen unavailable or out of ingredients'
+
+  try {
+    if (targetId) {
+      await orderApi.updateStatus(targetId, 'cancelled', reasonText)
+    }
+    const idx = allOrders.value.findIndex(
+      (o) => o._id === target._id || o.orderNumber === target.id || o.id === target.id
+    )
+    if (idx !== -1) {
+      allOrders.value[idx].status = 'CANCELLED'
+    }
+    isCancelModalOpen.value = false
+    emit('action', {
+      action: 'toast',
+      payload: { message: `❌ Order #${target.id} cancelled.` }
+    })
+  } catch (err) {
+    console.error('Failed to cancel order:', err)
+  } finally {
+    isCancelling.value = false
+  }
+}
+
 async function markDoneWithPickup() {
   if (!currentOrder.value || isUpdating.value) return
   isUpdating.value = true
   const orderObj = currentOrder.value
   const targetId = orderObj._id || orderObj.id
+  const isDeliveryOrder = Boolean(orderObj.isDelivery || orderObj.type === 'Direct Delivery')
+  const newStatus = isDeliveryOrder ? 'out_for_delivery' : 'completed'
+  const statusNote = isDeliveryOrder ? 'Order dispatched out for delivery' : 'Order picked up and completed'
 
   try {
     if (targetId) {
-      await orderApi.updateStatus(targetId, 'completed', 'Order picked up and completed')
+      await orderApi.updateStatus(targetId, newStatus, statusNote)
     }
     
     // Update status in allOrders list
@@ -154,28 +243,34 @@ async function markDoneWithPickup() {
       (o) => o._id === orderObj._id || o.orderNumber === orderObj.id || o.id === orderObj.id
     )
     if (idx !== -1) {
-      allOrders.value[idx].status = 'completed'
+      allOrders.value[idx].status = newStatus
     }
 
-    if (activeIndex.value >= activeOrders.value.length) {
-      activeIndex.value = Math.max(0, activeOrders.value.length - 1)
+    if (!isDeliveryOrder) {
+      if (activeIndex.value >= activeOrders.value.length) {
+        activeIndex.value = Math.max(0, activeOrders.value.length - 1)
+      }
+      emit('action', {
+        action: 'toast',
+        payload: { message: `🎉 Order #${orderObj.id} completed & archived!` }
+      })
+    } else {
+      emit('action', {
+        action: 'toast',
+        payload: { message: `🚴 Order #${orderObj.id} sent out for delivery!` }
+      })
     }
-
-    emit('action', {
-      action: 'toast',
-      payload: { message: `🎉 Order #${orderObj.id} completed & archived!` }
-    })
   } catch (err) {
-    console.error('Failed to mark order as completed:', err)
+    console.error('Failed to update order status:', err)
     const idx = allOrders.value.findIndex(
       (o) => o._id === orderObj._id || o.orderNumber === orderObj.id || o.id === orderObj.id
     )
     if (idx !== -1) {
-      allOrders.value[idx].status = 'completed'
+      allOrders.value[idx].status = newStatus
     }
     emit('action', {
       action: 'toast',
-      payload: { message: `🎉 Order #${orderObj.id} completed!` }
+      payload: { message: isDeliveryOrder ? `🚴 Order #${orderObj.id} out for delivery!` : `🎉 Order #${orderObj.id} completed!` }
     })
   } finally {
     isUpdating.value = false
@@ -276,6 +371,8 @@ function navigateTo(route, payload = null) {
               v-if="currentOrder"
               :order="currentOrder"
               :is-updating="isUpdating"
+              @accept="handleAcceptOrder"
+              @cancel="promptCancelOrder"
               @complete="markDoneWithPickup"
               @open-map="openLocationMap"
               @back-to-dashboard="navigateTo('vendor_dashboard')"
@@ -320,7 +417,6 @@ function navigateTo(route, payload = null) {
                 v-for="order in completedOrders.map(formatOrder)"
                 :key="order._id || order.id"
                 :order="order"
-                @open-map="openLocationMap"
               />
             </div>
 
@@ -338,6 +434,60 @@ function navigateTo(route, payload = null) {
 
         </div>
       </main>
+    </div>
+
+    <!-- Cancellation Reason Modal -->
+    <div
+      v-if="isCancelModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+    >
+      <div class="bg-surface-container-lowest rounded-3xl max-w-md w-full p-6 shadow-2xl border border-outline-variant/30 flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 text-red-600 font-bold">
+            <span class="material-symbols-outlined text-2xl">cancel</span>
+            <span class="text-base text-on-surface font-extrabold">Cancel Order {{ cancelTargetOrder?.id }}</span>
+          </div>
+          <button
+            type="button"
+            @click="isCancelModalOpen = false"
+            class="p-1 rounded-full text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer"
+          >
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+
+        <p class="text-xs text-on-surface-variant">
+          Provide a reason for the cancellation to inform the resident (optional). The order will be cancelled and portion quantities will be restored automatically.
+        </p>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-on-surface">Cancellation Reason (Optional)</label>
+          <textarea
+            v-model="cancelReason"
+            rows="3"
+            placeholder="e.g., Run out of fresh ingredients, kitchen closed unexpectedly..."
+            class="w-full bg-surface-container px-3.5 py-2.5 rounded-xl border border-outline-variant/30 text-xs text-on-surface placeholder:text-on-surface-variant/60 focus:border-red-500 outline-none resize-none"
+          ></textarea>
+        </div>
+
+        <div class="flex gap-2.5 pt-2">
+          <button
+            type="button"
+            @click="isCancelModalOpen = false"
+            class="flex-1 py-2.5 px-4 bg-surface-container hover:bg-surface-container-high text-on-surface-variant text-xs font-bold rounded-xl transition-all cursor-pointer"
+          >
+            Keep Order
+          </button>
+          <button
+            type="button"
+            :disabled="isCancelling"
+            @click="submitCancelOrder"
+            class="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
+          >
+            {{ isCancelling ? 'Cancelling...' : 'Confirm Cancel' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Resident Location Map Modal -->

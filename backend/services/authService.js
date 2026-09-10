@@ -29,8 +29,8 @@ export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
 
   let user = await User.findOne({ phone }).select('+totpSecret');
 
-  // If a vendor previously started registration but abandoned/refreshed without submitting onboarding:
-  if (user && user.role === 'vendor' && !user.isOnboarded) {
+  // If a user (vendor or resident) previously started registration but abandoned/refreshed without submitting onboarding:
+  if (user && !user.isOnboarded) {
     await User.findByIdAndDelete(user._id);
     user = null;
   }
@@ -50,7 +50,7 @@ export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
       totpSecret: secret,
       isTotpSetup: false,
       isVerified: false,
-      isOnboarded: assignedRole === 'resident',
+      isOnboarded: false,
       location: {
         type: 'Point',
         coordinates: defaultCoords,
@@ -82,12 +82,37 @@ export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
   }
 
   if (user && user.isTotpSetup) {
-    // Already enrolled user: NEVER send a new secret or QR code
+    if (payload.resetTotp || payload.reset2fa) {
+      // User requested a new 2FA QR code (e.g. lost device/code)
+      const secret = generateSecret();
+      user.totpSecret = secret;
+      // Note: Keep isTotpSetup true (or preserve isOnboarded) so an existing user is not treated as un-onboarded
+      await user.save();
+
+      const keyuri = generateURI({
+        issuer: 'FoodMap',
+        label: phone,
+        secret,
+      });
+      const qrCode = await QRCode.toDataURL(keyuri);
+
+      return {
+        success: true,
+        phone,
+        isEnrolled: false,
+        qrCode,
+        isOnboarded: Boolean(user.isOnboarded),
+        message: 'Scan new QR code with Google Authenticator to reset your 2FA',
+      };
+    }
+
+    // Already enrolled user: NEVER send a new secret or QR code unless reset requested
     return {
       success: true,
       phone,
       isEnrolled: true,
       qrCode: null,
+      isOnboarded: Boolean(user.isOnboarded),
       message: 'Enter the 6-digit code from Google Authenticator',
     };
   }
@@ -169,52 +194,35 @@ export async function verifyOTP(phoneOrPayload, otpArg, roleArg, nameArg) {
     window: 1,
   });
 
-  // [TEMPORARY DEV BYPASS] REMEMBER TO REMOVE BEFORE PRODUCTION
-  const isDevBypass = process.env.NODE_ENV !== 'production' && cleanOtp === '123456';
-
-  if (!verifyResult?.valid && !isDevBypass) {
+  if (!verifyResult?.valid) {
     const err = new Error('Invalid verification code. Please check your Google Authenticator app and try again');
     err.statusCode = 400;
     throw err;
   }
 
-  // Check if this is first-time enrollment (new user or un-onboarded vendor)
-  const isNewUser = !user.isTotpSetup || !user.isOnboarded;
+  // Check if this is first-time enrollment (user has never completed onboarding)
+  const isNewUser = !user.isOnboarded;
 
-  if (user.role === 'resident') {
+  if (user.isOnboarded) {
+    // Returning onboarded user (resident or vendor)
     user.isTotpSetup = true;
     user.isVerified = true;
-    user.isOnboarded = true;
     if (name) user.name = name;
     await user.save();
-
-    let resident = await Resident.findOne({ user: user._id });
-    if (!resident) {
-      resident = await Resident.create({
-        user: user._id,
-        location: user.location,
-      });
-    }
   } else {
-    // Vendor flow
-    if (user.isOnboarded) {
-      // Returning onboarded vendor
-      user.isTotpSetup = true;
-      user.isVerified = true;
-      await user.save();
-    } else {
-      // Brand new vendor:
-      // DO NOT finalize account yet!
-      // DO NOT set isTotpSetup = true or isOnboarded = true!
-      // DO NOT create dummy Vendor profile with default data!
-      user.isVerified = true;
-      await user.save();
-    }
+    // Brand new user (resident or vendor):
+    // Authenticated via OTP, but needs to complete profile setup before account is finalized
+    user.isVerified = true;
+    if (name && !user.name) user.name = name;
+    await user.save();
   }
 
   let vendor = null;
+  let resident = null;
   if (user.role === 'vendor') {
     vendor = await Vendor.findOne({ user: user._id });
+  } else if (user.role === 'resident') {
+    resident = await Resident.findOne({ user: user._id });
   }
 
   const token = generateToken(user);
@@ -233,8 +241,107 @@ export async function verifyOTP(phoneOrPayload, otpArg, roleArg, nameArg) {
       isTotpSetup: user.isTotpSetup,
       isOnboarded: Boolean(user.isOnboarded),
       vendor,
+      resident,
     },
     vendor,
+    resident,
+    token,
+  };
+}
+
+/**
+ * Complete Resident Onboarding
+ * - Creates/updates Resident profile with custom delivery address, flat/building, diet preferences, and GPS coords.
+ * - Finalizes user record (isOnboarded = true, isTotpSetup = true).
+ */
+export async function completeResidentOnboarding(userId, payload = {}) {
+  const user = await User.findById(userId);
+  if (!user) {
+    const err = new Error('User not found. Please verify your phone number first.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const residentName = (payload.name || payload.residentName || '').trim();
+  if (!residentName || residentName.length < 2) {
+    const err = new Error('Please provide your full name (at least 2 characters)');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const gender = (payload.gender || '').trim();
+  if (!gender) {
+    const err = new Error('Please select your gender');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const occupation = (payload.occupation || '').trim();
+  if (!occupation) {
+    const err = new Error('Please select your occupation');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const dietaryPreference = ['veg', 'non-veg', 'all'].includes(payload.dietaryPreference || payload.diet)
+    ? (payload.dietaryPreference || payload.diet)
+    : 'all';
+
+  const radarDistanceLimit = Number(payload.radarDistanceLimit) || 500;
+
+  user.name = residentName;
+  user.gender = gender;
+  user.occupation = occupation;
+  if (payload.avatar !== undefined) {
+    user.avatar = payload.avatar || '';
+  }
+  user.isTotpSetup = true;
+  user.isVerified = true;
+  user.isOnboarded = true;
+
+  await user.save();
+
+  let resident = await Resident.findOne({ user: user._id });
+  if (!resident) {
+    resident = await Resident.create({
+      user: user._id,
+      gender,
+      occupation,
+      preferences: {
+        radarDistanceLimit,
+        dietaryPreference,
+        notificationsEnabled: true,
+      },
+    });
+  } else {
+    resident.gender = gender || resident.gender;
+    resident.occupation = occupation || resident.occupation;
+    resident.preferences = {
+      ...resident.preferences,
+      radarDistanceLimit,
+      dietaryPreference,
+    };
+    await resident.save();
+  }
+
+  const token = generateToken(user);
+
+  return {
+    user: {
+      _id: user._id,
+      id: user._id,
+      phone: user.phone,
+      name: user.name,
+      role: user.role,
+      gender: user.gender,
+      occupation: user.occupation,
+      avatar: user.avatar,
+      location: user.location,
+      isTotpSetup: user.isTotpSetup,
+      isOnboarded: user.isOnboarded,
+      resident,
+    },
+    resident,
     token,
   };
 }

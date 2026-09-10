@@ -28,3 +28,27 @@ export async function protect(req, res, next) {
     return res.status(401).json({ success: false, message: 'Token invalid or expired. Please sign in again' });
   }
 }
+
+export async function optionalAuth(req, res, next) {
+  let token;
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  } else if (req.body && req.body.token) {
+    token = req.body.token;
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'foodmap_super_secret_jwt_key_2025');
+    const user = await User.findById(decoded.id);
+    if (user) {
+      req.user = user;
+    }
+  } catch (error) {
+    // ignore invalid token for optional auth
+  }
+  next();
+}

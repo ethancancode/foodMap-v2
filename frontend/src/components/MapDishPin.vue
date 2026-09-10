@@ -2,7 +2,7 @@
   <div class="food-mapbox-marker group">
     <div class="marker-card">
       <img
-        :src="food.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100'"
+        :src="food.image || DEFAULT_FOOD_SVG"
         :alt="food.name"
         class="marker-thumb"
       />
@@ -10,8 +10,31 @@
         <div class="marker-name">{{ food.name }}</div>
         <div class="marker-sub">
           <span class="marker-price">₹{{ food.price }}</span>
-          <span class="marker-stock">• {{ food.quantity || 1 }} left</span>
+          <span v-if="!food.fulfillmentOptions || food.fulfillmentOptions === 'BOTH'" class="marker-stock">• {{ food.quantity || 1 }} left</span>
         </div>
+      </div>
+      <!-- Right Side Meta Column: Mode Badge + Stock below -->
+      <div class="marker-meta-col">
+        <div
+          v-if="food.fulfillmentOptions === 'PICKUP_ONLY'"
+          class="marker-badge pickup"
+          title="Pickup Only"
+        >
+          Pickup
+        </div>
+        <div
+          v-else-if="food.fulfillmentOptions === 'DELIVERY_ONLY'"
+          class="marker-badge delivery"
+          title="Delivery Only"
+        >
+          Delivery
+        </div>
+        <span
+          v-if="food.fulfillmentOptions === 'PICKUP_ONLY' || food.fulfillmentOptions === 'DELIVERY_ONLY'"
+          class="marker-stock-sub"
+        >
+          {{ food.quantity || 1 }} left
+        </span>
       </div>
     </div>
     <div class="marker-pointer"></div>
@@ -19,6 +42,8 @@
 </template>
 
 <script setup>
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js'
+
 defineProps({
   food: {
     type: Object,
@@ -92,6 +117,44 @@ defineProps({
   font-size: 9px;
   font-weight: 700;
   color: #16a34a;
+}
+
+.marker-meta-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-left: 2px;
+}
+
+.marker-stock-sub {
+  font-size: 9px;
+  font-weight: 700;
+  color: #16a34a;
+  line-height: 1;
+}
+
+.marker-badge {
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.marker-badge.pickup {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.marker-badge.delivery {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
 }
 
 .marker-pointer {
