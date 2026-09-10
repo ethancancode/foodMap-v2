@@ -186,6 +186,19 @@ function locateMe() {
   )
 }
 
+function setRuiaDemoLocation() {
+  const lat = 19.02298
+  const lng = 72.85592
+  selectedCoords.value = [lng, lat]
+  selectedAddress.value = 'Ramnarain Ruia Autonomous College, Matunga, Mumbai (Demo)'
+  if (marker) {
+    marker.setLatLng([lat, lng])
+  }
+  if (map) {
+    map.flyTo([lat, lng], 18, { duration: 1.0 })
+  }
+}
+
 function confirmLocation() {
   emit('confirm', {
     coordinates: selectedCoords.value,
@@ -249,10 +262,21 @@ onBeforeUnmount(() => {
           <div class="map-viewport">
             <div ref="mapContainer" class="leaflet-map-canvas"></div>
 
-            <!-- Floating Top-Left Hint -->
-            <div class="map-tip-pill">
-              <span class="material-symbols-outlined text-[15px]">touch_app</span>
-              <span>Tap or drag the pin to set exact entrance</span>
+            <!-- Floating Top-Left Hint & Demo Preset Button -->
+            <div class="map-controls-top-row">
+              <div class="map-tip-pill">
+                <span class="material-symbols-outlined text-[15px]">touch_app</span>
+                <span>Tap or drag the pin</span>
+              </div>
+              <button
+                type="button"
+                class="demo-preset-btn"
+                @click="setRuiaDemoLocation"
+                title="Click to snap location to Ramnarain Ruia Autonomous College (For Demo)"
+              >
+                <span class="material-symbols-outlined text-[15px]">school</span>
+                <span>Ruia College (Demo)</span>
+              </button>
             </div>
 
             <!-- Floating GPS Button (Bottom-Right of Map) -->
@@ -425,11 +449,20 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.map-tip-pill {
+.map-controls-top-row {
   position: absolute;
   top: 1rem;
   left: 1rem;
+  right: 1rem;
   z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.map-tip-pill {
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
   padding: 0.35rem 0.75rem;
@@ -442,7 +475,30 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  pointer-events: none;
+}
+
+.demo-preset-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #fdf2f0;
+  color: #a93620;
+  border: 1.5px solid #a93620;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(169, 54, 32, 0.2);
+  transition: all 0.2s ease;
+}
+
+.demo-preset-btn:hover {
+  background: #a93620;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(169, 54, 32, 0.3);
 }
 
 .floating-gps-btn {

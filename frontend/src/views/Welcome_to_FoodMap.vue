@@ -434,6 +434,8 @@ async function finalizeResidentSetup() {
       dietaryPreference: residentDiet.value,
       radarDistanceLimit: residentDistance.value,
       avatar: residentAvatar.value || '',
+      coordinates: coordinates.value && coordinates.value.length === 2 ? coordinates.value : [72.85592, 19.02298],
+      address: pickupAddress.value || 'Ramnarain Ruia Autonomous College, Matunga, Mumbai (Demo)',
     }
 
     await authStore.completeOnboarding(payload)
@@ -1283,6 +1285,29 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
 
+
+                  <!-- Resident Location Selection -->
+                  <div class="input-group">
+                    <label class="input-label">Delivery / Campus Location</label>
+                    <div
+                      class="custom-input-field clickable-input-field"
+                      @click="openMapModal"
+                    >
+                      <span class="material-symbols-outlined input-icon">location_on</span>
+                      <input
+                        v-model="pickupAddress"
+                        type="text"
+                        placeholder="Tap to set location or Ruia Demo..."
+                        class="text-input cursor-pointer"
+                        readonly
+                        @click="openMapModal"
+                      />
+                      <button type="button" class="map-open-pill" @click.stop="openMapModal">
+                        <span class="material-symbols-outlined text-[15px]">map</span>
+                        <span>Pin</span>
+                      </button>
+                    </div>
+                  </div>
 
                   <!-- Dietary Preference -->
                   <div class="input-group">

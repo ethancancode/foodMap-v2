@@ -289,6 +289,15 @@ export async function completeResidentOnboarding(userId, payload = {}) {
 
   const radarDistanceLimit = Number(payload.radarDistanceLimit) || 500;
 
+  if (Array.isArray(payload.coordinates) && payload.coordinates.length === 2) {
+    user.location = {
+      type: 'Point',
+      coordinates: payload.coordinates,
+      address: payload.address || '',
+    };
+    user.markModified('location');
+  }
+
   user.name = residentName;
   user.gender = gender;
   user.occupation = occupation;
