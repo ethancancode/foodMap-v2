@@ -58,22 +58,8 @@ try {
   // Ignore permission or file lock errors
 }
 
-// Connect to MongoDB Atlas & auto-seed if empty
-connectDB().then(async (conn) => {
-  if (conn) {
-    try {
-      const Food = (await import('./models/Food.js')).default;
-      const count = await Food.countDocuments();
-      if (count === 0) {
-        console.log('[FoodMap] Empty database detected. Auto-seeding 5 Ruia College demo kitchens & dishes...');
-        const { seedRuiaDemoVendors } = await import('./scripts/seedRuiaDemoVendors.js');
-        await seedRuiaDemoVendors();
-      }
-    } catch (e) {
-      console.warn('[Auto-Seed Warning]', e.message);
-    }
-  }
-});
+// Connect to MongoDB Atlas
+connectDB();
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -92,20 +78,6 @@ app.get('/api/health', (req, res) => {
     service: 'FoodMap Backend API',
     time: new Date().toISOString(),
   });
-});
-
-// Seed Ruia Demo Vendors (Can be triggered directly on live Render deployment)
-app.get('/api/seed-ruia', async (req, res) => {
-  try {
-    const { seedRuiaDemoVendors } = await import('./scripts/seedRuiaDemoVendors.js');
-    await seedRuiaDemoVendors();
-    res.json({
-      success: true,
-      message: '5 Ruia College (Matunga) demo vendors and fresh dishes seeded successfully to Atlas database!',
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
 });
 
 // Frontend Vite Integration for unified port 3000 hosting
