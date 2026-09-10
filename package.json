@@ -15,6 +15,7 @@
     "preview": "node backend/server.js"
   },
   "dependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
     "axios": "^1.19.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
@@ -29,14 +30,13 @@
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
+    "vite": "^8.1.5",
     "vue": "^3.5.40",
     "vue-router": "^5.2.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.8",
     "concurrently": "^10.0.5",
-    "vite": "^8.1.5",
     "vite-plugin-vue-devtools": "^8.1.5"
   },
   "engines": {
