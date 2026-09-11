@@ -59,24 +59,27 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 const userCoords = computed(() => {
-  // 1. Live browser GPS if available
-  if (liveCoords.value) {
-    return liveCoords.value
-  }
-  // 2. Saved user profile coordinates
-  if (props.user?.location?.coordinates) {
+  // 1. Saved user profile coordinates (e.g. Ruia College demo or chosen address)
+  if (props.user?.location?.coordinates && Array.isArray(props.user.location.coordinates) && props.user.location.coordinates.length === 2) {
     return {
       lng: props.user.location.coordinates[0],
       lat: props.user.location.coordinates[1]
     }
   }
-  // 3. Graceful fallback (Seawoods / Nerul, Navi Mumbai)
-  return { lng: 73.0188, lat: 19.0225 }
+  // 2. Live browser GPS if available (e.g. for guest or users without explicit location)
+  if (liveCoords.value) {
+    return liveCoords.value
+  }
+  // 3. Graceful fallback (Ruia College / Matunga)
+  return { lng: 72.85592, lat: 19.02298 }
 })
 
 let geoWatchId = null
 
 function requestLiveLocation() {
+  // Only request live browser GPS if user doesn't already have an explicit profile location set
+  if (props.user?.location?.coordinates) return
+
   if ('geolocation' in navigator) {
     // 1. Immediate fresh position fix
     navigator.geolocation.getCurrentPosition(
@@ -164,9 +167,11 @@ async function reverseGeocode(lat, lng) {
 }
 
 watch(
-  liveCoords,
+  userCoords,
   (newCoords) => {
-    if (newCoords?.lat && newCoords?.lng) {
+    if (props.user?.location?.address) {
+      locationName.value = props.user.location.address
+    } else if (newCoords?.lat && newCoords?.lng) {
       reverseGeocode(newCoords.lat, newCoords.lng)
     }
   },

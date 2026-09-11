@@ -8,7 +8,6 @@
     "clean-accounts": "node backend/scripts/clearAccounts.js",
     "clean-orders": "node backend/scripts/clearOrders.js",
     "clean-dishes": "node backend/scripts/clearDishes.js",
-    "seed-ruia": "node backend/scripts/seedRuiaDemoVendors.js",
     "build": "vite build frontend",
     "lint": "vite build frontend",
     "start": "node backend/server.js",

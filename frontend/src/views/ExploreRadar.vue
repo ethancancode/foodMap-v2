@@ -50,14 +50,14 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 const userCoords = computed(() => {
-  if (liveCoords.value) return liveCoords.value
-  if (props.user?.location?.coordinates) {
+  if (props.user?.location?.coordinates && Array.isArray(props.user.location.coordinates) && props.user.location.coordinates.length === 2) {
     return {
       lng: props.user.location.coordinates[0],
       lat: props.user.location.coordinates[1]
     }
   }
-  return { lng: 73.0188, lat: 19.0225 }
+  if (liveCoords.value) return liveCoords.value
+  return { lng: 72.85592, lat: 19.02298 }
 })
 
 function getDistanceLimit(distStr) {
@@ -75,7 +75,7 @@ function getFoodCoords(item) {
   if (vendor?.location?.coordinates) {
     return vendor.location.coordinates
   }
-  return [73.0188, 19.0225]
+  return [72.85592, 19.02298]
 }
 
 const filteredFoods = computed(() => {
@@ -107,6 +107,9 @@ const filteredFoods = computed(() => {
 })
 
 function requestLiveLocation() {
+  // If user has an explicit saved location, do not override with browser GPS
+  if (props.user?.location?.coordinates) return
+
   if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
