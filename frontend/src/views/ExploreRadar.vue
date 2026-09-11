@@ -49,7 +49,34 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   return Math.round(R * c)
 }
 
+const DEMO_LOC_KEY = 'foodmap_active_demo_location'
+const RUIA_LAT = 19.02298
+const RUIA_LNG = 72.85592
+
+const manualCoords = ref(null)
+
+// Initialize demo coords from sessionStorage if previously set
+try {
+  const saved = sessionStorage.getItem(DEMO_LOC_KEY)
+  if (saved) {
+    manualCoords.value = JSON.parse(saved)
+  }
+} catch (e) {}
+
+function handleLocationUpdate(coords) {
+  manualCoords.value = coords
+  liveCoords.value = coords
+  if (coords) {
+    sessionStorage.setItem(DEMO_LOC_KEY, JSON.stringify(coords))
+  } else {
+    sessionStorage.removeItem(DEMO_LOC_KEY)
+  }
+}
+
 const userCoords = computed(() => {
+  if (manualCoords.value) {
+    return manualCoords.value
+  }
   if (props.user?.location?.coordinates && Array.isArray(props.user.location.coordinates) && props.user.location.coordinates.length === 2) {
     return {
       lng: props.user.location.coordinates[0],
@@ -57,7 +84,7 @@ const userCoords = computed(() => {
     }
   }
   if (liveCoords.value) return liveCoords.value
-  return { lng: 72.85592, lat: 19.02298 }
+  return { lng: RUIA_LNG, lat: RUIA_LAT }
 })
 
 function getDistanceLimit(distStr) {
@@ -306,7 +333,7 @@ function openFoodDetail(item) {
           :foods="filteredFoods"
           :radius="selectedDistance"
           @select-food="openFoodDetail"
-          @update-location="(coords) => liveCoords = coords"
+          @update-location="handleLocationUpdate"
         />
       </main>
     </div>

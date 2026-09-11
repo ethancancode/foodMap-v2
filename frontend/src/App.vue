@@ -331,6 +331,11 @@ function startContinuousLocationSync() {
   // Watch position with high accuracy
   appGeoWatchId = navigator.geolocation.watchPosition(
     async (pos) => {
+      // If user already has an explicit location set on profile, do not override with device GPS
+      if (authStore.user?.location?.coordinates && Array.isArray(authStore.user.location.coordinates) && authStore.user.location.coordinates.length === 2) {
+        return
+      }
+
       const lat = pos.coords.latitude
       const lng = pos.coords.longitude
       if (!lat || !lng) return

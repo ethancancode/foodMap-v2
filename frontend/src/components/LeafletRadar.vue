@@ -14,8 +14,8 @@
     </div>
 
 
-    <!-- Bottom Left: Center On User Button -->
-    <div class="absolute bottom-6 left-4 z-10 pointer-events-auto">
+    <!-- Bottom Left: Controls Row (My Location & Toggle Ruia / Original Position) -->
+    <div class="absolute bottom-6 left-4 z-10 pointer-events-auto flex items-center gap-2">
       <button
         @click="centerOnUser"
         class="bg-surface/95 backdrop-blur-md px-3 py-2 rounded-xl shadow-lg border border-outline-variant/30 text-xs font-bold text-on-surface hover:text-primary flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
@@ -24,12 +24,32 @@
         <span class="material-symbols-outlined text-[16px] text-primary">my_location</span>
         <span>My Location</span>
       </button>
+
+      <button
+        v-if="!isAtRuia"
+        @click="goToRuiaCollege"
+        class="bg-surface/95 backdrop-blur-md px-3 py-2 rounded-xl shadow-lg border border-primary/30 text-xs font-bold text-primary hover:bg-primary/10 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+        title="Jump to Ramnarain Ruia College, Matunga (Demo)"
+      >
+        <span class="material-symbols-outlined text-[16px]">school</span>
+        <span>Ruia College (Demo)</span>
+      </button>
+
+      <button
+        v-else
+        @click="backToOriginalPosition"
+        class="bg-surface/95 backdrop-blur-md px-3 py-2 rounded-xl shadow-lg border border-primary/30 text-xs font-bold text-primary hover:bg-primary/10 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+        title="Return to original home location"
+      >
+        <span class="material-symbols-outlined text-[16px]">undo</span>
+        <span>Original Position</span>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, createVNode, render } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, createVNode, render } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapDishPin from './MapDishPin.vue';
@@ -121,6 +141,38 @@ function centerOnUser() {
   } else if (map && radiusCircle) {
     map.fitBounds(radiusCircle.getBounds(), { padding: [30, 30], animate: true });
   }
+}
+
+const RUIA_LAT = 19.02298;
+const RUIA_LNG = 72.85592;
+
+const isAtRuia = computed(() => {
+  const lat = props.userCoords?.lat;
+  const lng = props.userCoords?.lng;
+  if (!lat || !lng) return false;
+  return Math.abs(lat - RUIA_LAT) < 0.005 && Math.abs(lng - RUIA_LNG) < 0.005;
+});
+
+function goToRuiaCollege() {
+  const lat = RUIA_LAT;
+  const lng = RUIA_LNG;
+  emit('update-location', { lat, lng });
+  if (map) {
+    if (userMarker) {
+      userMarker.setLatLng([lat, lng]);
+    }
+    if (radiusCircle) {
+      radiusCircle.setLatLng([lat, lng]);
+      map.fitBounds(radiusCircle.getBounds(), { padding: [30, 30], animate: true });
+    } else {
+      map.flyTo([lat, lng], 17, { duration: 1.0 });
+    }
+  }
+}
+
+function backToOriginalPosition() {
+  emit('update-location', null);
+  centerOnUser();
 }
 
 function createUserMarker() {

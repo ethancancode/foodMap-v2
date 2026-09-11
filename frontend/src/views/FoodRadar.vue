@@ -58,7 +58,25 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   return Math.round(R * c)
 }
 
+const DEMO_LOC_KEY = 'foodmap_active_demo_location'
+
+const manualCoords = ref(null)
+
+const RUIA_LAT = 19.02298
+const RUIA_LNG = 72.85592
+
+// Restore active demo location from sessionStorage if switched on Explore Radar or previous tab
+try {
+  const saved = sessionStorage.getItem(DEMO_LOC_KEY)
+  if (saved) {
+    manualCoords.value = JSON.parse(saved)
+  }
+} catch (e) {}
+
 const userCoords = computed(() => {
+  if (manualCoords.value) {
+    return manualCoords.value
+  }
   // 1. Saved user profile coordinates (e.g. Ruia College demo or chosen address)
   if (props.user?.location?.coordinates && Array.isArray(props.user.location.coordinates) && props.user.location.coordinates.length === 2) {
     return {
@@ -71,8 +89,27 @@ const userCoords = computed(() => {
     return liveCoords.value
   }
   // 3. Graceful fallback (Ruia College / Matunga)
-  return { lng: 72.85592, lat: 19.02298 }
+  return { lng: RUIA_LNG, lat: RUIA_LAT }
 })
+
+const isAtRuia = computed(() => {
+  const lat = userCoords.value?.lat
+  const lng = userCoords.value?.lng
+  if (!lat || !lng) return false
+  return Math.abs(lat - RUIA_LAT) < 0.005 && Math.abs(lng - RUIA_LNG) < 0.005
+})
+
+function toggleDemoLocation() {
+  if (!isAtRuia.value) {
+    const target = { lat: RUIA_LAT, lng: RUIA_LNG }
+    manualCoords.value = target
+    sessionStorage.setItem(DEMO_LOC_KEY, JSON.stringify(target))
+  } else {
+    manualCoords.value = null
+    sessionStorage.removeItem(DEMO_LOC_KEY)
+    requestLiveLocation()
+  }
+}
 
 let geoWatchId = null
 
@@ -169,7 +206,9 @@ async function reverseGeocode(lat, lng) {
 watch(
   userCoords,
   (newCoords) => {
-    if (props.user?.location?.address) {
+    if (isAtRuia.value) {
+      locationName.value = 'Ramnarain Ruia College, Matunga (Demo)'
+    } else if (props.user?.location?.address && !manualCoords.value) {
       locationName.value = props.user.location.address
     } else if (newCoords?.lat && newCoords?.lng) {
       reverseGeocode(newCoords.lat, newCoords.lng)
@@ -502,6 +541,17 @@ function toggleRole() {
               </div>
 
               <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  @click="toggleDemoLocation"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer border"
+                  :class="isAtRuia ? 'bg-primary/15 text-primary border-primary/30' : 'bg-surface-container text-on-surface hover:bg-surface-container-high border-outline-variant/30'"
+                  :title="isAtRuia ? 'Return to original home location' : 'Jump to Ramnarain Ruia College, Matunga (Demo)'"
+                >
+                  <span class="material-symbols-outlined text-[15px]">{{ isAtRuia ? 'undo' : 'school' }}</span>
+                  <span>{{ isAtRuia ? 'Original Position' : 'Ruia Demo' }}</span>
+                </button>
+
                 <button
                   @click="selectedDiet = selectedDiet === 'veg' ? 'all' : 'veg'"
                   :class="selectedDiet === 'veg' ? 'bg-green-600 text-white font-bold' : 'bg-surface-container text-on-surface-variant'"
