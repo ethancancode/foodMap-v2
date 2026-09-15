@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { foodApi } from '../services/api.js'
 import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js'
 
@@ -34,6 +34,10 @@ const editForm = ref({
   image: '',
   customHours: '',
   customMinutes: '',
+})
+
+const hasCustomImage = computed(() => {
+  return Boolean(editForm.value.image && editForm.value.image !== DEFAULT_FOOD_SVG)
 })
 
 watch(
@@ -222,15 +226,10 @@ async function saveDish() {
         <label class="text-xs font-bold text-on-surface uppercase tracking-wider block">Dish Photo</label>
         <div class="relative w-full aspect-[16/9] rounded-2xl overflow-hidden bg-surface-container border border-outline-variant/30 group">
           <img
-            v-if="editForm.image"
-            :src="editForm.image"
+            :src="editForm.image || DEFAULT_FOOD_SVG"
             :alt="editForm.name"
             class="w-full h-full object-cover"
           />
-          <div v-else class="w-full h-full flex flex-col items-center justify-center text-on-surface-variant">
-            <span class="material-symbols-outlined text-[36px] mb-1">restaurant</span>
-            <span class="text-xs">No photo available</span>
-          </div>
 
           <!-- Upload overlay button -->
           <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
@@ -240,19 +239,21 @@ async function saveDish() {
               class="px-3.5 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-md hover:bg-primary/90 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span class="material-symbols-outlined text-[16px]">photo_camera</span>
-              <span>Change Photo</span>
+              <span>{{ hasCustomImage ? 'Change Photo' : 'Upload Photo' }}</span>
             </button>
             <button
-              v-if="editForm.image"
+              v-if="hasCustomImage"
               type="button"
-              @click="editForm.image = ''"
+              @click="editForm.image = DEFAULT_FOOD_SVG"
               class="px-3 py-2 rounded-xl bg-red-600/90 text-white text-xs font-bold shadow-md hover:bg-red-600 transition-all flex items-center gap-1 cursor-pointer"
-              title="Remove photo"
+              title="Reset to default illustration"
             >
               <span class="material-symbols-outlined text-[16px]">delete</span>
+              <span>Reset</span>
             </button>
           </div>
         </div>
+
         <input
           ref="editFileInput"
           type="file"

@@ -72,12 +72,15 @@ function initStatusMap() {
   mapInstance = L.map(mapContainer.value, {
     center: [lat, lng],
     zoom: 15,
+    maxZoom: 18.5,
+    minZoom: 12,
     zoomControl: false,
     attributionControl: false
   })
 
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19
+    maxZoom: 19,
+    maxNativeZoom: 18
   }).addTo(mapInstance)
 
   const pinIcon = L.divIcon({

@@ -38,20 +38,6 @@ export async function getFoodById(id) {
   return food;
 }
 
-export async function createFood(vendorUserId, data) {
-  let vendor = await Vendor.findOne({ user: vendorUserId });
-  if (!vendor) {
-    vendor = await Vendor.create({
-      user: vendorUserId,
-      businessName: data.vendorName || 'Priya Kitchen',
-      location: data.vendorLocation || {
-        type: 'Point',
-        coordinates: [72.9348, 19.1462],
-        pickupAddress: 'Bhandup West, Mumbai',
-      },
-    });
-  }
-
 function calculateReadyAt(statusText, explicitReadyAt) {
   if (explicitReadyAt) return new Date(explicitReadyAt);
   if (!statusText) return null;
@@ -66,6 +52,20 @@ function calculateReadyAt(statusText, explicitReadyAt) {
   }
   return null;
 }
+
+export async function createFood(vendorUserId, data) {
+  let vendor = await Vendor.findOne({ user: vendorUserId });
+  if (!vendor) {
+    vendor = await Vendor.create({
+      user: vendorUserId,
+      businessName: data.vendorName || 'Priya Kitchen',
+      location: data.vendorLocation || {
+        type: 'Point',
+        coordinates: [72.9348, 19.1462],
+        pickupAddress: 'Bhandup West, Mumbai',
+      },
+    });
+  }
 
   const quantity = Number(data.quantity) || 1;
   const initialQuantity = Number(data.initialQuantity) || quantity;
