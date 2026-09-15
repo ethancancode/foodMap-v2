@@ -3,8 +3,6 @@
     <!-- Leaflet Map Div -->
     <div ref="mapContainerRef" class="w-full h-full absolute inset-0 z-0"></div>
 
-
-
     <!-- Top Overlay Badge -->
     <div class="absolute top-4 right-4 z-10 pointer-events-none">
       <div class="bg-surface/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-md text-xs font-semibold text-on-surface-variant pointer-events-auto flex items-center gap-2 border border-outline-variant/30">
@@ -12,7 +10,6 @@
         <span>{{ foods.length }} Active {{ foods.length === 1 ? 'Dish' : 'Dishes' }}</span>
       </div>
     </div>
-
 
     <!-- Bottom Left: Controls Row (My Location & Toggle Ruia / Original Position) -->
     <div class="absolute bottom-6 left-4 z-10 pointer-events-auto flex items-center gap-2">
@@ -45,6 +42,95 @@
         <span>Original Position</span>
       </button>
     </div>
+
+    <!-- Multi-Dish Cluster Bottom Drawer / Modal -->
+    <Transition name="slide-up">
+      <div
+        v-if="selectedCluster"
+        class="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 max-h-[75vh] bg-surface/95 backdrop-blur-xl border border-outline-variant/40 rounded-2xl shadow-2xl z-30 flex flex-col overflow-hidden animate-in"
+      >
+        <!-- Header -->
+        <div class="p-3.5 bg-surface-container-high/60 border-b border-outline-variant/20 flex items-center justify-between">
+          <div class="flex items-center gap-2 overflow-hidden">
+            <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-[18px]">soup_kitchen</span>
+            </div>
+            <div class="truncate">
+              <h3 class="text-xs font-bold text-on-surface truncate">
+                {{ selectedCluster.vendorNames?.length === 1 ? selectedCluster.vendorNames[0] : `${selectedCluster.vendorNames?.length} Nearby Kitchens` }}
+              </h3>
+              <p class="text-[11px] text-on-surface-variant flex items-center gap-1 font-medium">
+                <span class="text-primary font-bold">{{ selectedCluster.items.length }} dishes</span> available right here
+              </p>
+            </div>
+          </div>
+          <button
+            @click="selectedCluster = null"
+            class="w-7 h-7 rounded-full bg-surface hover:bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface border border-outline-variant/30 transition-colors cursor-pointer"
+            title="Close"
+          >
+            <span class="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        </div>
+
+        <!-- Dishes List -->
+        <div class="overflow-y-auto max-h-[50vh] p-2.5 space-y-2 divide-y divide-outline-variant/10">
+          <div
+            v-for="item in selectedCluster.items"
+            :key="item._id || item.id"
+            @click="handleSelectClusterDish(item)"
+            class="pt-2 first:pt-0 flex items-center justify-between gap-3 p-2 rounded-xl hover:bg-surface-container transition-all cursor-pointer group"
+          >
+            <div class="flex items-center gap-2.5 min-w-0">
+              <img
+                :src="item.image || DEFAULT_FOOD_SVG"
+                :alt="item.name"
+                class="w-12 h-12 rounded-lg object-cover shrink-0 border border-outline-variant/20"
+              />
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-on-surface group-hover:text-primary transition-colors truncate">
+                  {{ item.name }}
+                </div>
+                <div class="text-[10.5px] text-on-surface-variant truncate font-medium">
+                  by {{ item.vendorName || item.vendor?.businessName || item.vendor?.name || 'Home Kitchen' }}
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-xs font-extrabold text-primary">₹{{ item.price }}</span>
+                  <span class="text-[10px] text-green-600 font-bold bg-green-50 px-1.5 py-0.2 rounded">
+                    {{ item.quantity || 1 }} left
+                  </span>
+                  <span
+                    v-if="item.fulfillmentOptions === 'PICKUP_ONLY'"
+                    class="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded uppercase"
+                  >
+                    Pickup
+                  </span>
+                  <span
+                    v-else-if="item.fulfillmentOptions === 'DELIVERY_ONLY'"
+                    class="text-[9px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded uppercase"
+                  >
+                    Delivery
+                  </span>
+                </div>
+                <div class="flex items-center gap-1.5 mt-1 text-[10px] text-on-surface-variant">
+                  <span v-if="item.diet" :class="item.diet === 'veg' ? 'text-green-600 font-bold' : 'text-red-500 font-bold'">
+                    ● {{ item.diet === 'veg' ? 'Veg' : 'Non-veg' }}
+                  </span>
+                  <span v-if="item.cookingStatus" class="truncate">• {{ item.cookingStatus }}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              class="shrink-0 px-2.5 py-1.5 rounded-lg bg-primary/10 group-hover:bg-primary text-primary group-hover:text-on-primary text-[11px] font-bold transition-all flex items-center gap-1"
+            >
+              <span>View</span>
+              <span class="material-symbols-outlined text-[13px]">arrow_forward</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -53,6 +139,7 @@ import { ref, computed, onMounted, onUnmounted, watch, createVNode, render } fro
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapDishPin from './MapDishPin.vue';
+import { DEFAULT_FOOD_SVG } from '../utils/defaultFoodImage.js';
 
 const props = defineProps({
   userCoords: {
@@ -72,6 +159,7 @@ const props = defineProps({
 const emit = defineEmits(['select-food', 'update-location']);
 
 const mapContainerRef = ref(null);
+const selectedCluster = ref(null);
 let map = null;
 let userMarker = null;
 let radiusCircle = null;
@@ -81,6 +169,11 @@ function getMetersFromRadius(radiusStr) {
   if (radiusStr === '1km') return 1000;
   if (radiusStr === '3km') return 3000;
   return 500;
+}
+
+function handleSelectClusterDish(dish) {
+  selectedCluster.value = null;
+  emit('select-food', dish);
 }
 
 function updateRadiusView(animate = true) {
@@ -206,6 +299,11 @@ function updateFoodMarkers() {
 
   foodLayerGroup.clearLayers();
 
+  // Cluster nearby dishes within ~30 meters (0.0003 deg latitude/longitude)
+  // so any dishes or vendors very close to each other are grouped cleanly instead of overlapping
+  const PROXIMITY_THRESHOLD_DEG = 0.0003;
+  const clusters = [];
+
   props.foods.forEach((food) => {
     const baseCoords =
       food.location?.coordinates ||
@@ -214,22 +312,60 @@ function updateFoodMarkers() {
 
     // GeoJSON is [lng, lat], Leaflet is [lat, lng]
     const [lng, lat] = baseCoords;
+    const vendorName = food.vendorName || (typeof food.vendor === 'object' ? food.vendor?.businessName || food.vendor?.name : null) || 'Home Kitchen';
 
-    // Create a container element and mount the MapDishPin Vue component inside it
+    // Check if this dish fits into an existing proximity cluster
+    let matchedCluster = clusters.find((c) => {
+      const dLat = Math.abs(c.lat - lat);
+      const dLng = Math.abs(c.lng - lng);
+      return dLat < PROXIMITY_THRESHOLD_DEG && dLng < PROXIMITY_THRESHOLD_DEG;
+    });
+
+    if (matchedCluster) {
+      matchedCluster.items.push(food);
+      if (!matchedCluster.vendorNames.includes(vendorName)) {
+        matchedCluster.vendorNames.push(vendorName);
+      }
+    } else {
+      clusters.push({
+        lat,
+        lng,
+        vendorNames: [vendorName],
+        items: [food]
+      });
+    }
+  });
+
+  // Render a marker for each unique cluster
+  clusters.forEach((cluster) => {
+    const primaryFood = cluster.items[0];
+    const totalCount = cluster.items.length;
+
+    // Create container and mount MapDishPin with stack indicator
     const el = document.createElement('div');
-    const vnode = createVNode(MapDishPin, { food });
+    const vnode = createVNode(MapDishPin, {
+      food: primaryFood,
+      count: totalCount,
+      allFoods: cluster.items
+    });
     render(vnode, el);
 
     const icon = L.divIcon({
       className: 'leaflet-food-marker-wrapper',
       html: el,
-      iconSize: [160, 50],
-      iconAnchor: [80, 50]
+      iconSize: [180, 50],
+      iconAnchor: [90, 46]
     });
 
-    const marker = L.marker([lat, lng], { icon });
+    const marker = L.marker([cluster.lat, cluster.lng], { icon });
+
     marker.on('click', () => {
-      emit('select-food', food);
+      if (cluster.items.length > 1) {
+        selectedCluster.value = cluster;
+      } else {
+        selectedCluster.value = null;
+        emit('select-food', primaryFood);
+      }
     });
 
     foodLayerGroup.addLayer(marker);
@@ -242,15 +378,18 @@ onMounted(() => {
 
   map = L.map(mapContainerRef.value, {
     center: [centerLat, centerLng],
-    zoom: 16,
+    zoom: 17,
+    maxZoom: 18.5,
+    minZoom: 12,
     zoomSnap: 0.25,
     zoomControl: true,
     attributionControl: false
   });
 
-  // Esri World Street Map (Clean roads, highways, railways, transit hubs with 0 religious symbols, 0 watermarks, 100% free)
+  // Esri World Street Map (Native tiles up to level 18; maxNativeZoom scales tiles up cleanly without showing 'Map data not yet available' blank tiles)
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19
+    maxZoom: 19,
+    maxNativeZoom: 18
   }).addTo(map);
 
   foodLayerGroup = L.layerGroup().addTo(map);
@@ -368,81 +507,6 @@ onUnmounted(() => {
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-.food-mapbox-marker {
-  position: relative;
-  cursor: pointer;
-  transform: translate3d(0, 0, 0);
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.food-mapbox-marker:hover {
-  transform: scale(1.08) translateY(-4px);
-  z-index: 9999 !important;
-}
-
-.marker-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(8px);
-  padding: 5px 8px 5px 5px;
-  border-radius: 14px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
-  border: 1.5px solid rgba(169, 54, 32, 0.35);
-}
-
-.marker-thumb {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  object-fit: cover;
-}
-
-.marker-info {
-  display: flex;
-  flex-direction: column;
-  max-width: 105px;
-}
-
-.marker-name {
-  font-size: 11px;
-  font-weight: 700;
-  color: #1f2937;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.2;
-}
-
-.marker-sub {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 2px;
-}
-
-.marker-price {
-  font-size: 11px;
-  font-weight: 800;
-  color: #a93620;
-}
-
-.marker-stock {
-  font-size: 9px;
-  font-weight: 700;
-  color: #16a34a;
-}
-
-.marker-pointer {
-  width: 0;
-  height: 0;
-  margin: 0 auto;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 6px solid #a93620;
-}
-
 @keyframes leaflet-pulse {
   0% {
     transform: scale(0.6);
@@ -471,5 +535,17 @@ onUnmounted(() => {
   outline: none !important;
   box-shadow: none !important;
   -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Drawer slide transition */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(20px) scale(0.97);
+  opacity: 0;
 }
 </style>

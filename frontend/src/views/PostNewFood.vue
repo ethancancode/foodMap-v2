@@ -492,37 +492,59 @@ async function handlePost() {
                 ></textarea>
               </div>
 
-              <!-- Dietary Preference (Veg / Non-Veg) -->
-              <div class="flex flex-col">
-                <label class="text-xs font-bold text-on-surface mb-1.5 uppercase tracking-wider block">
-                  Food Type / Dietary
-                </label>
-                <div class="grid grid-cols-2 gap-2.5">
-                  <!-- Vegetarian Option -->
-                  <button
-                    type="button"
-                    @click="isVeg = true"
-                    :class="isVeg ? 'bg-green-500/10 border-green-600 text-green-800 ring-2 ring-green-600/20 font-bold shadow-xs' : 'bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container font-medium'"
-                    class="flex items-center justify-center gap-2.5 py-2.5 px-3 rounded-xl border transition-all cursor-pointer"
+              <!-- Dietary Preference (Veg / Non-Veg) & Category Selector -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <!-- Category Selector -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-bold text-on-surface mb-1.5 uppercase tracking-wider block" for="item-category">
+                    Category
+                  </label>
+                  <select
+                    id="item-category"
+                    v-model="itemCategory"
+                    class="w-full bg-surface text-on-surface text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary rounded-xl p-3 sm:p-3.5 shadow-sm border border-outline-variant/30 cursor-pointer"
                   >
-                    <span class="w-4 h-4 rounded-xs border-2 border-green-600 flex items-center justify-center p-0.5 shrink-0">
-                      <span class="w-2 h-2 rounded-full bg-green-600"></span>
-                    </span>
-                    <span class="text-xs sm:text-sm">Pure Veg</span>
-                  </button>
+                    <option value="Main Course">Main Course</option>
+                    <option value="Snacks">Snacks</option>
+                    <option value="Breakfast">Breakfast</option>
+                    <option value="Dessert">Dessert</option>
+                    <option value="Beverages">Beverages</option>
+                    <option value="Specialty">Specialty</option>
+                  </select>
+                </div>
 
-                  <!-- Non-Vegetarian Option -->
-                  <button
-                    type="button"
-                    @click="isVeg = false"
-                    :class="!isVeg ? 'bg-red-500/10 border-red-600 text-red-800 ring-2 ring-red-600/20 font-bold shadow-xs' : 'bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container font-medium'"
-                    class="flex items-center justify-center gap-2.5 py-2.5 px-3 rounded-xl border transition-all cursor-pointer"
-                  >
-                    <span class="w-4 h-4 rounded-xs border-2 border-red-600 flex items-center justify-center p-0.5 shrink-0">
-                      <span class="w-2 h-2 rounded-full bg-red-600"></span>
-                    </span>
-                    <span class="text-xs sm:text-sm">Non-Veg</span>
-                  </button>
+                <!-- Food Type / Dietary Preference -->
+                <div class="flex flex-col">
+                  <label class="text-xs font-bold text-on-surface mb-1.5 uppercase tracking-wider block">
+                    Food Type / Dietary
+                  </label>
+                  <div class="grid grid-cols-2 gap-2">
+                    <!-- Vegetarian Option -->
+                    <button
+                      type="button"
+                      @click="isVeg = true"
+                      :class="isVeg ? 'bg-green-500/10 border-green-600 text-green-800 ring-2 ring-green-600/20 font-bold shadow-xs' : 'bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container font-medium'"
+                      class="flex items-center justify-center gap-2 py-2.5 px-2 rounded-xl border transition-all cursor-pointer"
+                    >
+                      <span class="w-3.5 h-3.5 rounded-xs border-2 border-green-600 flex items-center justify-center p-0.5 shrink-0">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-600"></span>
+                      </span>
+                      <span class="text-xs">Pure Veg</span>
+                    </button>
+
+                    <!-- Non-Vegetarian Option -->
+                    <button
+                      type="button"
+                      @click="isVeg = false"
+                      :class="!isVeg ? 'bg-red-500/10 border-red-600 text-red-800 ring-2 ring-red-600/20 font-bold shadow-xs' : 'bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container font-medium'"
+                      class="flex items-center justify-center gap-2 py-2.5 px-2 rounded-xl border transition-all cursor-pointer"
+                    >
+                      <span class="w-3.5 h-3.5 rounded-xs border-2 border-red-600 flex items-center justify-center p-0.5 shrink-0">
+                        <span class="w-1.5 h-1.5 rounded-full bg-red-600"></span>
+                      </span>
+                      <span class="text-xs">Non-Veg</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 

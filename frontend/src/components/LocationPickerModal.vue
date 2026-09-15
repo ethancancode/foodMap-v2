@@ -124,6 +124,8 @@ function initMap() {
   map = L.map(mapContainer.value, {
     center: [initialLat, initialLng],
     zoom: 16,
+    maxZoom: 18.5,
+    minZoom: 12,
     zoomSnap: 0.25,
     zoomControl: true,
     attributionControl: false,
@@ -132,6 +134,7 @@ function initMap() {
   // Esri World Street Map (Matches resident radar map: clean roads, highways, 0 religious symbols, 0 watermarks, 100% free)
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 19,
+    maxNativeZoom: 18,
   }).addTo(map)
 
   // Draggable Kitchen Pin Marker
@@ -465,7 +468,7 @@ onBeforeUnmount(() => {
 .map-tip-pill {
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
-  padding: 0.35rem 0.75rem;
+  padding: 0.4rem 0.85rem;
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;

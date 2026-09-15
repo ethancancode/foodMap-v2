@@ -28,7 +28,26 @@ const props = defineProps({
 const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
 // Component State
-const activeFilter = ref('all') // 'all' | 'Main Course' | 'Breakfast / Snacks' | 'Street Food' | 'Sweets & Breads'
+const selectedCategories = ref([]) // [] means All, or array of category strings e.g. ['Main Course', 'Snacks']
+const allAvailableCategories = ['Main Course', 'Snacks', 'Breakfast', 'Dessert', 'Beverages', 'Specialty']
+const isCategoryDropdownOpen = ref(false)
+
+function toggleCategory(cat) {
+  if (cat === 'all') {
+    selectedCategories.value = []
+    return
+  }
+  const idx = selectedCategories.value.indexOf(cat)
+  if (idx !== -1) {
+    selectedCategories.value.splice(idx, 1)
+  } else {
+    selectedCategories.value.push(cat)
+  }
+}
+
+function clearAllCategories() {
+  selectedCategories.value = []
+}
 const selectedDiet = ref('all') // 'all' | 'veg' | 'non-veg'
 const selectedDistance = ref('500m')
 const searchQuery = ref('')
@@ -249,11 +268,15 @@ const filteredFoods = computed(() => {
       // Availability filter
       if (!item.isAvailable && item.quantity <= 0) return false;
 
-      // Category filter
-      if (activeFilter.value !== 'all') {
-        if (item.category !== activeFilter.value && !item.tags?.includes(activeFilter.value)) {
-          return false;
-        }
+      // Multi-Category filter
+      if (selectedCategories.value.length > 0) {
+        const matchesCategory = selectedCategories.value.includes(item.category) ||
+          selectedCategories.value.some((cat) => item.tags?.includes(cat)) ||
+          // Support friendly alias mapping
+          (selectedCategories.value.includes('Snacks') && item.category === 'Breakfast / Snacks') ||
+          (selectedCategories.value.includes('Breakfast') && item.category === 'Breakfast / Snacks') ||
+          (selectedCategories.value.includes('Main Course') && (item.category === 'Meals' || item.category === 'Main Course'))
+        if (!matchesCategory) return false
       }
 
       // Diet filter
@@ -465,7 +488,7 @@ function toggleRole() {
 
         <div class="flex flex-col w-full">
           <!-- Header Area inside Main -->
-          <div class="px-4 sm:px-container-margin py-3 sm:py-stack-md flex flex-col md:flex-row justify-between items-start md:items-center gap-3 z-10 relative bg-background border-b border-outline-variant/10 lg:border-none">
+          <div class="px-4 sm:px-container-margin py-3 sm:py-stack-md flex flex-col md:flex-row justify-between items-start md:items-center gap-3 z-30 relative bg-background border-b border-outline-variant/10 lg:border-none">
             <div>
               <div class="flex items-center gap-2 mb-0.5">
                 <span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
@@ -475,38 +498,102 @@ function toggleRole() {
               <h1 class="text-xl sm:text-2xl lg:text-3xl font-display-lg text-on-surface font-bold">Food cooking around you now</h1>
             </div>
 
-            <!-- Mobile View Switcher (Feed vs Map) & Filter Pills -->
-            <div class="flex items-center justify-between w-full md:w-auto gap-2">
-              <!-- Categories Filter Pills (horizontal scroll on mobile) -->
-              <div class="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full hide-scrollbar">
+            <!-- Filter Actions: All & Filter Dropdown Popover -->
+            <div class="flex items-center gap-2 relative z-40">
+              <!-- All Button -->
+              <button
+                type="button"
+                @click="toggleCategory('all')"
+                :class="selectedCategories.length === 0 ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'"
+                class="whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-label-md transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>All</span>
+                <span class="opacity-80 text-[11px]">({{ foodsInRange.length }})</span>
+              </button>
+
+              <!-- Filter Dropdown Trigger Button -->
+              <div class="relative">
                 <button
-                  @click="activeFilter = 'all'"
-                  :class="activeFilter === 'all' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'"
-                  class="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-label-md transition-all cursor-pointer"
+                  type="button"
+                  @click="isCategoryDropdownOpen = !isCategoryDropdownOpen"
+                  :class="selectedCategories.length > 0 ? 'bg-primary text-on-primary font-bold shadow-sm ring-2 ring-primary/20' : 'bg-surface-container text-on-surface hover:bg-surface-container-high border border-outline-variant/30'"
+                  class="whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-label-md transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  All ({{ foodsInRange.length }})
+                  <span class="material-symbols-outlined text-[16px]">tune</span>
+                  <span>Filter</span>
+                  <span
+                    v-if="selectedCategories.length > 0"
+                    class="ml-0.5 w-4 h-4 rounded-full bg-white text-primary text-[10px] font-black flex items-center justify-center"
+                  >
+                    {{ selectedCategories.length }}
+                  </span>
+                  <span class="material-symbols-outlined text-[14px] transition-transform duration-200" :class="{ 'rotate-180': isCategoryDropdownOpen }">
+                    arrow_drop_down
+                  </span>
                 </button>
-                <button
-                  @click="activeFilter = 'Main Course'"
-                  :class="activeFilter === 'Main Course' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'"
-                  class="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-label-md transition-all cursor-pointer"
+
+                <!-- Backdrop to dismiss dropdown on outer click -->
+                <div
+                  v-if="isCategoryDropdownOpen"
+                  @click="isCategoryDropdownOpen = false"
+                  class="fixed inset-0 z-40 bg-transparent"
+                ></div>
+
+                <!-- Filter Popover Dropdown Menu -->
+                <div
+                  v-if="isCategoryDropdownOpen"
+                  class="absolute right-0 top-full mt-2 w-64 p-3 bg-surface-container-lowest dark:bg-surface-container-low border border-outline-variant/30 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
                 >
-                  Meals
-                </button>
-                <button
-                  @click="activeFilter = 'Breakfast / Snacks'"
-                  :class="activeFilter === 'Breakfast / Snacks' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'"
-                  class="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-label-md transition-all cursor-pointer"
-                >
-                  Snacks
-                </button>
-                <button
-                  @click="activeFilter = 'Street Food'"
-                  :class="activeFilter === 'Street Food' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'"
-                  class="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-label-md transition-all cursor-pointer"
-                >
-                  Street Food
-                </button>
+                  <div class="flex items-center justify-between pb-2 mb-2 border-b border-outline-variant/15">
+                    <span class="text-xs font-bold text-on-surface flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[15px] text-primary">category</span>
+                      Category Filter
+                    </span>
+                    <button
+                      v-if="selectedCategories.length > 0"
+                      type="button"
+                      @click="clearAllCategories"
+                      class="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div class="space-y-1 max-h-56 overflow-y-auto pr-1">
+                    <label
+                      v-for="cat in allAvailableCategories"
+                      :key="cat"
+                      class="flex items-center justify-between px-2.5 py-2 rounded-xl text-xs cursor-pointer hover:bg-surface-container transition-colors"
+                      :class="selectedCategories.includes(cat) ? 'bg-primary/10 text-primary font-bold' : 'text-on-surface'"
+                    >
+                      <span class="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          :checked="selectedCategories.includes(cat)"
+                          @change="toggleCategory(cat)"
+                          class="rounded text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer accent-primary"
+                        />
+                        <span>{{ cat }}</span>
+                      </span>
+                      <span v-if="selectedCategories.includes(cat)" class="material-symbols-outlined text-[15px] text-primary">
+                        check
+                      </span>
+                    </label>
+                  </div>
+
+                  <div class="pt-2.5 mt-2 border-t border-outline-variant/15 flex items-center justify-between gap-2">
+                    <span class="text-[10px] text-on-surface-variant font-medium">
+                      {{ selectedCategories.length === 0 ? 'Showing all categories' : `${selectedCategories.length} selected` }}
+                    </span>
+                    <button
+                      type="button"
+                      @click="isCategoryDropdownOpen = false"
+                      class="px-3 py-1 bg-primary text-on-primary rounded-lg text-xs font-bold hover:brightness-110 transition-all cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
