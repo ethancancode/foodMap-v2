@@ -109,15 +109,15 @@ function initMap() {
   const k = kitchenCoords.value
 
   mapInstance = L.map(mapContainer.value, {
-    maxZoom: 18.5,
+    maxZoom: 17,
     minZoom: 12,
     zoomControl: true,
     attributionControl: false
   })
 
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    maxNativeZoom: 18
+    maxZoom: 17,
+    maxNativeZoom: 16
   }).addTo(mapInstance)
 
   // User Marker

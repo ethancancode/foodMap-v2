@@ -597,21 +597,21 @@ onBeforeUnmount(() => {
                 Discover food that's actually available nearby, right now. Real-time updates from your neighborhood favorites.
               </p>
 
-              <!-- Live Stats Micro-Bar -->
+              <!-- Live Features Micro-Bar -->
               <div class="live-stats-bar">
                 <div class="stat-item">
-                  <span class="stat-value">18+</span>
-                  <span class="stat-label">Active Kitchens</span>
+                  <span class="stat-value">Live GPS</span>
+                  <span class="stat-label">Interactive Radar</span>
                 </div>
                 <div class="stat-divider"></div>
                 <div class="stat-item">
-                  <span class="stat-value">&lt; 15 min</span>
-                  <span class="stat-label">Fresh & Ready</span>
+                  <span class="stat-value">Atomic Stock</span>
+                  <span class="stat-label">Zero Overselling</span>
                 </div>
                 <div class="stat-divider"></div>
                 <div class="stat-item">
-                  <span class="stat-value">4.9 ★</span>
-                  <span class="stat-label">Community Rating</span>
+                  <span class="stat-value">Direct Pickup</span>
+                  <span class="stat-label">Zero Commission</span>
                 </div>
               </div>
             </div>
@@ -1772,6 +1772,7 @@ onBeforeUnmount(() => {
 .stat-item {
   display: flex;
   flex-direction: column;
+  white-space: nowrap;
 }
 
 .stat-value {

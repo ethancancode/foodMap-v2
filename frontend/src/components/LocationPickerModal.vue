@@ -124,17 +124,17 @@ function initMap() {
   map = L.map(mapContainer.value, {
     center: [initialLat, initialLng],
     zoom: 16,
-    maxZoom: 18.5,
+    maxZoom: 17,
     minZoom: 12,
     zoomSnap: 0.25,
     zoomControl: true,
     attributionControl: false,
   })
 
-  // Esri World Street Map (Matches resident radar map: clean roads, highways, 0 religious symbols, 0 watermarks, 100% free)
+  // Esri World Street Map (maxNativeZoom: 16 prevents missing tile placeholders)
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    maxNativeZoom: 18,
+    maxZoom: 17,
+    maxNativeZoom: 16,
   }).addTo(map)
 
   // Draggable Kitchen Pin Marker

@@ -378,18 +378,18 @@ onMounted(() => {
 
   map = L.map(mapContainerRef.value, {
     center: [centerLat, centerLng],
-    zoom: 17,
-    maxZoom: 18.5,
+    zoom: 13,
+    maxZoom: 17,
     minZoom: 12,
     zoomSnap: 0.25,
     zoomControl: true,
     attributionControl: false
   });
 
-  // Esri World Street Map (Native tiles up to level 18; maxNativeZoom scales tiles up cleanly without showing 'Map data not yet available' blank tiles)
+  // Esri World Street Map (maxNativeZoom: 16 scales tiles smoothly without requesting missing tiles or showing 'Map data not yet available')
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    maxNativeZoom: 18
+    maxZoom: 17,
+    maxNativeZoom: 16
   }).addTo(map);
 
   foodLayerGroup = L.layerGroup().addTo(map);
@@ -457,6 +457,29 @@ onUnmounted(() => {
 .leaflet-food-marker-wrapper {
   background: transparent !important;
   border: none !important;
+}
+
+.leaflet-food-marker-wrapper .thumb-wrapper {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  max-width: 20px !important;
+  border-radius: 5px !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+}
+
+.leaflet-food-marker-wrapper .marker-thumb {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  max-width: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  border-radius: 5px !important;
+  object-fit: cover !important;
+  display: block !important;
+  flex-shrink: 0 !important;
 }
 
 .user-radar-marker {

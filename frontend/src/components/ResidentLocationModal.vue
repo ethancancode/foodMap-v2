@@ -58,7 +58,7 @@ function initMap() {
   map = L.map(mapContainer.value, {
     center: [lat, lng],
     zoom: 15,
-    maxZoom: 18.5,
+    maxZoom: 17,
     minZoom: 12,
     zoomControl: false,
     attributionControl: false,
@@ -68,8 +68,8 @@ function initMap() {
 
   // Esri World Street Map (Matches resident radar map)
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    maxNativeZoom: 18,
+    maxZoom: 17,
+    maxNativeZoom: 16,
   }).addTo(map)
 
   marker = L.marker([lat, lng], {

@@ -105,8 +105,8 @@ const totalCount = computed(() => {
   gap: 6px;
   background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(10px);
-  padding: 4px 6px 4px 4px;
-  border-radius: 12px;
+  padding: 3px 8px 3px 5px;
+  border-radius: 9999px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1.5px solid rgba(169, 54, 32, 0.35);
   position: relative;
@@ -119,25 +119,28 @@ const totalCount = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  max-width: 26px;
-  border-radius: 6px;
-  overflow: visible;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  max-width: 20px;
+  border-radius: 5px;
+  overflow: hidden;
   flex-shrink: 0;
 }
 
 .marker-thumb {
-  width: 26px;
-  height: 26px;
-  max-width: 26px;
-  max-height: 26px;
-  border-radius: 6px;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  max-width: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  border-radius: 5px;
   object-fit: cover;
   background: #fdfaf9;
   border: 1px solid rgba(0, 0, 0, 0.08);
   display: block;
+  flex-shrink: 0;
 }
 
 .stack-badge-icon {
@@ -245,7 +248,7 @@ const totalCount = computed(() => {
   right: -2px;
   bottom: 8px;
   background: rgba(255, 255, 255, 0.85);
-  border-radius: 12px;
+  border-radius: 9999px;
   border: 1px solid rgba(169, 54, 32, 0.25);
   z-index: 1;
   pointer-events: none;
@@ -258,7 +261,7 @@ const totalCount = computed(() => {
   right: -4px;
   bottom: 10px;
   background: rgba(255, 255, 255, 0.55);
-  border-radius: 12px;
+  border-radius: 9999px;
   border: 1px solid rgba(169, 54, 32, 0.15);
   z-index: 0;
   pointer-events: none;
