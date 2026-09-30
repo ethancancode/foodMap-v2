@@ -68,6 +68,54 @@ const foodSchema = new mongoose.Schema(
       enum: ['BOTH', 'PICKUP_ONLY', 'DELIVERY_ONLY'],
       default: 'BOTH',
     },
+    productType: {
+      type: String,
+      enum: [
+        'COOKED_MEAL',
+        'BAKERY',
+        'SNACKS',
+        'PICKLES',
+        'JAMS',
+        'SAUCES',
+        'HOMEMADE_PRODUCT',
+        'CATERING',
+        'SEASONAL',
+        'OTHER',
+      ],
+      default: 'COOKED_MEAL',
+    },
+    isMarketplace: {
+      type: Boolean,
+      default: false,
+    },
+    preparationTime: {
+      type: String,
+      default: '15-20 mins',
+    },
+    allergens: {
+      type: [String],
+      default: [],
+    },
+    surplusStatus: {
+      type: String,
+      enum: ['NORMAL', 'LIMITED', 'SURPLUS'],
+      default: 'NORMAL',
+    },
+    surplusDiscount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 90,
+    },
+    isSurplusRescue: {
+      type: Boolean,
+      default: false,
+    },
+    subscriberReservedQty: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     image: {
       type: String,
       default: DEFAULT_FOOD_SVG,

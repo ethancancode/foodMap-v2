@@ -68,9 +68,9 @@ function getStatusBadgeClass(status) {
     case 'placed':
       return 'bg-amber-100 text-amber-800 border-amber-200'
     case 'accepted':
-      return 'bg-blue-100 text-blue-800 border-blue-200'
+      return 'bg-primary/10 text-primary border-primary/20'
     case 'preparing':
-      return 'bg-purple-100 text-purple-800 border-purple-200'
+      return 'bg-amber-100 text-amber-800 border-amber-200'
     case 'ready_for_pickup':
     case 'ready':
       return 'bg-emerald-100 text-emerald-800 border-emerald-200'

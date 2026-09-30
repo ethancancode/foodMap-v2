@@ -91,14 +91,19 @@ export async function getMe(req, res, next) {
 
 export async function completeOnboarding(req, res, next) {
   try {
-    const isResident = req.user.role === 'resident' || req.body.role === 'resident';
-    const result = isResident
-      ? await authService.completeResidentOnboarding(req.user._id, req.body)
-      : await authService.completeVendorOnboarding(req.user._id, req.body);
+    const role = req.user.role || req.body.role || 'resident';
+    let result;
+    if (role === 'vendor') {
+      result = await authService.completeVendorOnboarding(req.user._id, req.body);
+    } else if (role === 'resident') {
+      result = await authService.completeResidentOnboarding(req.user._id, req.body);
+    } else {
+      result = await authService.completeGenericOnboarding(req.user._id, req.body);
+    }
 
     res.json({
       success: true,
-      message: isResident ? 'Resident onboarding completed successfully' : 'Kitchen onboarding completed successfully',
+      message: `${role.replace('_', ' ')} onboarding completed successfully`,
       ...result,
     });
   } catch (err) {

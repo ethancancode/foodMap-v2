@@ -44,6 +44,9 @@ export const vendorApi = {
   },
   submitReview: (vendorId, data) => api.post(`/vendors/${vendorId}/reviews`, data).then((r) => r.data),
   getReviews: (vendorId) => api.get(`/vendors/${vendorId}/reviews`).then((r) => r.data),
+  toggleFollow: (vendorId) => api.post(`/vendors/${vendorId}/follow`).then((r) => r.data),
+  getAnalytics: (vendorId) => api.get(vendorId ? `/vendors/${vendorId}/analytics` : '/vendors/me/analytics').then((r) => r.data),
+  getDemandPrediction: (vendorId) => api.get(vendorId ? `/vendors/${vendorId}/demand-prediction` : '/vendors/me/demand-prediction').then((r) => r.data),
 };
 
 export const orderApi = {
@@ -60,8 +63,47 @@ export const orderApi = {
       : { status, note: noteOrOptions, rejectionReason: noteOrOptions };
     return api.patch(`/orders/${id}/status`, body).then((r) => r.data);
   },
+  getAvailableDeliveries: () => api.get('/orders/delivery/available').then((r) => r.data),
+  getMyDeliveries: () => api.get('/orders/delivery/my-deliveries').then((r) => r.data),
+  acceptDelivery: (id) => api.patch(`/orders/${id}/accept-delivery`).then((r) => r.data),
+  updateDeliveryStatus: (id, status) => api.patch(`/orders/${id}/delivery-status`, { status }).then((r) => r.data),
+  updateDeliveryLocation: (id, coordinates, address) => api.patch(`/orders/${id}/delivery-location`, { coordinates, address }).then((r) => r.data),
 };
 
+export const adminApi = {
+  getStats: () => api.get('/admin/stats').then((r) => r.data),
+  getUsers: (params) => api.get('/admin/users', { params }).then((r) => r.data),
+  updateUserStatus: (id, isActive) => api.patch(`/admin/users/${id}/status`, { isActive }).then((r) => r.data),
+  getVendors: (params) => api.get('/admin/vendors', { params }).then((r) => r.data),
+  verifyVendor: (id, status) => api.patch(`/admin/vendors/${id}/verify`, { status }).then((r) => r.data),
+  getFoods: (params) => api.get('/admin/foods', { params }).then((r) => r.data),
+  moderateFood: (id, payload) => api.patch(`/admin/foods/${id}/moderate`, payload).then((r) => r.data),
+  getOrders: (params) => api.get('/admin/orders', { params }).then((r) => r.data),
+};
+
+export const subscriptionApi = {
+  getPlans: (params) => api.get('/subscriptions/plans', { params }).then((r) => r.data),
+  getPlanById: (id) => api.get(`/subscriptions/plans/${id}`).then((r) => r.data),
+  createPlan: (data) => api.post('/subscriptions/plans', data).then((r) => r.data),
+  subscribe: (data) => api.post('/subscriptions/subscribe', data).then((r) => r.data),
+  getMySubscriptions: () => api.get('/subscriptions/my').then((r) => r.data),
+  getVendorSubscriptions: (vendorId) => api.get(vendorId ? `/subscriptions/vendor/${vendorId}` : '/subscriptions/vendor').then((r) => r.data),
+  cancelSubscription: (id) => api.patch(`/subscriptions/${id}/cancel`).then((r) => r.data),
+};
+
+export const groupOrderApi = {
+  create: (data) => api.post('/group-orders/create', data).then((r) => r.data),
+  getByCode: (code) => api.get(`/group-orders/${code}`).then((r) => r.data),
+  join: (code, data) => api.post(`/group-orders/${code}/join`, data).then((r) => r.data),
+  addItem: (code, item) => api.post(`/group-orders/${code}/items`, item).then((r) => r.data),
+  updateItem: (code, foodId, item) => api.patch(`/group-orders/${code}/items/${foodId}`, item).then((r) => r.data),
+  removeItem: (code, foodId) => api.delete(`/group-orders/${code}/items/${foodId}`).then((r) => r.data),
+  checkout: (code, options) => api.post(`/group-orders/${code}/checkout`, options).then((r) => r.data),
+};
+
+export const sustainabilityApi = {
+  getStats: () => api.get('/sustainability/stats').then((r) => r.data),
+};
 
 export const authApi = {
   requestOtp: (payload) => {
@@ -78,6 +120,8 @@ export const residentApi = {
   getProfile: (id) => api.get(id ? `/residents/profile/${id}` : '/residents/profile').then((r) => r.data),
   updatePreferences: (data) => api.put('/residents/preferences', data).then((r) => r.data),
   vouchVendor: (vendorId) => api.post('/residents/vouch', { vendorId }).then((r) => r.data),
+  getRecommendations: () => api.get('/residents/recommendations').then((r) => r.data),
+  updateAllergies: (allergies) => api.put('/residents/allergies', { allergies }).then((r) => r.data),
 };
 
 export const locationApi = {

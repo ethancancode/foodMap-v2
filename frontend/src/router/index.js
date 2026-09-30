@@ -18,6 +18,9 @@ import NewOrder from '../views/NewOrder.vue';
 import VendorOrderConfirmed from '../views/VendorOrderConfirmed.vue';
 import VendorProfile from '../views/VendorProfile.vue';
 import EditVendorProfile from '../views/EditVendorProfile.vue';
+import AdminDashboard from '../views/AdminDashboard.vue';
+import DeliveryPartnerDashboard from '../views/DeliveryPartnerDashboard.vue';
+
 const routes = [
   { path: '/', name: 'welcome', component: Welcome_to_FoodMap },
   { path: '/welcome', name: 'welcome-page', component: Welcome_to_FoodMap },
@@ -40,12 +43,21 @@ const routes = [
   { path: '/vendor-order-confirmed', name: 'vendor-order-confirmed', component: VendorOrderConfirmed },
   { path: '/vendor-profile/:id?', name: 'vendor-profile', component: VendorProfile },
   { path: '/edit-vendor-profile', name: 'edit-vendor-profile', component: EditVendorProfile },
+  { path: '/admin', name: 'admin-dashboard', component: AdminDashboard },
+  { path: '/delivery', name: 'delivery-dashboard', component: DeliveryPartnerDashboard },
 ];
 
 export const router = createRouter({
   history: createWebHistory(),
   routes,
 });
+
+function getRoleHome(role) {
+  if (role === 'admin') return '/admin';
+  if (role === 'delivery_partner' || role === 'courier') return '/delivery';
+  if (role === 'vendor') return '/vendor-dashboard';
+  return '/radar';
+}
 
 // Route Guard: Protect registered routes & enforce role restrictions
 router.beforeEach((to, from, next) => {
@@ -61,6 +73,14 @@ router.beforeEach((to, from, next) => {
     '/edit-vendor-profile',
   ];
 
+  const adminOnlyRoutes = [
+    '/admin'
+  ];
+
+  const deliveryOnlyRoutes = [
+    '/delivery'
+  ];
+
   const authRequiredRoutes = [
     '/resident-profile',
     '/resident-orders',
@@ -68,19 +88,43 @@ router.beforeEach((to, from, next) => {
     '/order-pickup',
     '/order-completed',
     ...vendorOnlyRoutes,
+    ...adminOnlyRoutes,
+    ...deliveryOnlyRoutes
   ];
 
   const isAuthRequired = authRequiredRoutes.some((route) => to.path.startsWith(route));
 
+  // 1. Unauthenticated users accessing protected routes -> redirect to welcome
   if (isAuthRequired && !token) {
-    // Guest tried to access protected route -> redirect to welcome / login
     return next({ path: '/', query: { redirect: to.fullPath } });
   }
 
-  // If a resident attempts to access vendor-exclusive backoffice routes
-  const isVendorOnly = vendorOnlyRoutes.some((route) => to.path.startsWith(route));
-  if (isVendorOnly && role === 'resident') {
-    return next({ path: '/radar' });
+  // 2. Authenticated users landing on root / welcome -> redirect to their role home
+  if ((to.path === '/' || to.path === '/welcome') && token && role) {
+    return next({ path: getRoleHome(role) });
+  }
+
+  // 3. Admin routes only accessible by admin
+  if (adminOnlyRoutes.some((route) => to.path.startsWith(route)) && role !== 'admin') {
+    return next({ path: getRoleHome(role) });
+  }
+
+  // 4. Delivery routes only accessible by delivery partner
+  if (deliveryOnlyRoutes.some((route) => to.path.startsWith(route)) && role !== 'delivery_partner' && role !== 'courier') {
+    return next({ path: getRoleHome(role) });
+  }
+
+  // 5. Vendor routes only accessible by vendor
+  if (vendorOnlyRoutes.some((route) => to.path.startsWith(route)) && role !== 'vendor') {
+    return next({ path: getRoleHome(role) });
+  }
+
+  // 6. Admin and Delivery Partner cannot be accidentally routed to resident radar
+  if (to.path === '/radar' && role === 'admin') {
+    return next({ path: '/admin' });
+  }
+  if (to.path === '/radar' && (role === 'delivery_partner' || role === 'courier')) {
+    return next({ path: '/delivery' });
   }
 
   next();

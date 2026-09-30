@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { foodApi, vendorApi } from '../services/api.js'
+import { foodApi, vendorApi, residentApi } from '../services/api.js'
 import {
   onFoodAvailabilityUpdated,
   onFoodNewPosted,
@@ -12,6 +12,9 @@ import LeafletRadar from '../components/LeafletRadar.vue'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
 import ResidentFoodCard from '../components/ResidentFoodCard.vue'
+import GroupOrderModal from '../components/GroupOrderModal.vue'
+import NotificationModal from '../components/NotificationModal.vue'
+import SubscriptionModal from '../components/SubscriptionModal.vue'
 import { getCookingCountdown, currentTimestamp } from '../utils/countdown.js'
 
 // Re-evaluates every second as currentTimestamp ticks
@@ -28,9 +31,36 @@ const props = defineProps({
 const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
 // Component State
+const discoveryMode = ref('all') // 'all' | 'marketplace' | 'recommendations' | 'surplus'
+const isGroupModalOpen = ref(false)
+const isNotificationModalOpen = ref(false)
+const isSubscriptionModalOpen = ref(false)
+const recommendationsList = ref([])
+const isRecsLoading = ref(false)
+
+async function fetchRecommendations() {
+  try {
+    isRecsLoading.value = true
+    const res = await residentApi.getRecommendations()
+    recommendationsList.value = res?.foods || res?.data || []
+  } catch (err) {
+    console.warn('[Recs] Error:', err.message)
+  } finally {
+    isRecsLoading.value = false
+  }
+}
+
+function handleDiscoveryModeChange(mode) {
+  discoveryMode.value = mode
+  if (mode === 'recommendations' && recommendationsList.value.length === 0) {
+    fetchRecommendations()
+  }
+}
+
 const selectedCategories = ref([]) // [] means All, or array of category strings e.g. ['Main Course', 'Snacks']
 const allAvailableCategories = ['Main Course', 'Snacks', 'Breakfast', 'Dessert', 'Beverages', 'Specialty']
 const isCategoryDropdownOpen = ref(false)
+
 
 function toggleCategory(cat) {
   if (cat === 'all') {
@@ -250,8 +280,23 @@ const filteredFoods = computed(() => {
         if (!matchName && !matchVendor && !matchDesc && !matchTag) return false;
       }
 
+      // Discovery Mode filtering
+      if (discoveryMode.value === 'marketplace') {
+        if (!item.isMarketplace) return false;
+      } else if (discoveryMode.value === 'surplus') {
+        if (!item.isSurplusRescue && item.surplusStatus !== 'SURPLUS') return false;
+      } else if (discoveryMode.value === 'all') {
+        // Show cooked meals and general discovery
+      }
+
       // Pure numeric ground distance filter
       return item.calculatedDistance <= distLimit;
+    })
+    .sort((a, b) => {
+      if (discoveryMode.value === 'recommendations') {
+        return (b.recommendationScore || 0) - (a.recommendationScore || 0);
+      }
+      return 0;
     });
 });
 
@@ -444,18 +489,105 @@ function toggleRole() {
 
         <div class="flex flex-col w-full">
           <!-- Header Area inside Main -->
-          <div class="px-4 sm:px-container-margin py-3 sm:py-stack-md flex flex-col md:flex-row justify-between items-start md:items-center gap-3 z-30 relative bg-background border-b border-outline-variant/10 lg:border-none">
-            <div>
-              <div class="flex items-center gap-2 mb-0.5">
-                <span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
-                <span class="text-[10px] sm:text-[11px] font-label-sm text-primary tracking-widest uppercase font-bold">Real-time Kitchen Radar</span>
-                <span class="text-[11px] text-on-surface-variant font-medium">• {{ locationName || (liveCoords ? 'Locating...' : 'Seawoods / Nerul') }}</span>
+          <div class="px-4 sm:px-container-margin py-3 sm:py-stack-md flex flex-col justify-between items-start gap-3 z-30 relative bg-background border-b border-outline-variant/10 lg:border-none">
+            <div class="w-full flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+              <div>
+                <div class="flex items-center gap-2 mb-0.5">
+                  <span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+                  <span class="text-[10px] sm:text-[11px] font-label-sm text-primary tracking-widest uppercase font-bold">Real-time Kitchen Radar</span>
+                  <span class="text-[11px] text-on-surface-variant font-medium">• {{ locationName || (liveCoords ? 'Locating...' : 'Seawoods / Nerul') }}</span>
+                </div>
+                <h1 class="text-xl sm:text-2xl lg:text-3xl font-display-lg text-on-surface font-bold">Food cooking around you now</h1>
               </div>
-              <h1 class="text-xl sm:text-2xl lg:text-3xl font-display-lg text-on-surface font-bold">Food cooking around you now</h1>
+
+              <!-- Community Actions: Subscriptions, Group Order & Notifications -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  @click="isSubscriptionModalOpen = true"
+                  class="px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/30 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span class="material-symbols-outlined text-[16px] text-primary">event_repeat</span>
+                  <span>Meal Plans</span>
+                </button>
+
+                <button
+                  type="button"
+                  @click="isGroupModalOpen = true"
+                  class="px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/30 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span class="material-symbols-outlined text-[16px] text-primary">groups</span>
+                  <span>Group Order</span>
+                </button>
+
+                <button
+                  type="button"
+                  @click="isNotificationModalOpen = true"
+                  class="p-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface border border-outline-variant/30 text-xs font-bold flex items-center justify-center transition-colors cursor-pointer"
+                  title="Alerts"
+                >
+                  <span class="material-symbols-outlined text-[18px]">notifications</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Discovery Modes Filter Bar -->
+            <div class="w-full flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
+              <button
+                type="button"
+                @click="handleDiscoveryModeChange('all')"
+                :class="discoveryMode === 'all' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:text-on-surface'"
+                class="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <span class="material-symbols-outlined text-[15px]">soup_kitchen</span>
+                <span>Cooked Meals</span>
+              </button>
+
+              <button
+                type="button"
+                @click="handleDiscoveryModeChange('marketplace')"
+                :class="discoveryMode === 'marketplace' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:text-on-surface'"
+                class="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <span class="material-symbols-outlined text-[15px]">store</span>
+                <span>Marketplace Pantry</span>
+              </button>
+
+              <button
+                type="button"
+                @click="handleDiscoveryModeChange('recommendations')"
+                :class="discoveryMode === 'recommendations' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:text-on-surface'"
+                class="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <span class="material-symbols-outlined text-[15px]">auto_awesome</span>
+                <span>AI Recommendations</span>
+              </button>
+
+              <button
+                type="button"
+                @click="handleDiscoveryModeChange('surplus')"
+                :class="discoveryMode === 'surplus' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:text-on-surface'"
+                class="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <span class="material-symbols-outlined text-[15px]">eco</span>
+                <span>Surplus Rescue</span>
+              </button>
+            </div>
+
+            <!-- Allergy Transparency Notice Banner -->
+            <div
+              v-if="props.user?.allergies && props.user.allergies.length > 0"
+              class="w-full p-2.5 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs flex items-center gap-2 font-medium"
+            >
+              <span class="material-symbols-outlined text-amber-700 text-[18px] shrink-0">health_and_safety</span>
+              <span class="flex-1">
+                <strong class="font-bold text-amber-900">Allergy Shield:</strong>
+                Filtering dishes sensitive to: <span class="font-extrabold text-red-600">{{ props.user.allergies.join(', ') }}</span>. Transparency badges displayed on all items.
+              </span>
             </div>
 
             <!-- Filter Actions: All & Filter Dropdown Popover -->
-            <div class="flex items-center gap-2 relative z-40">
+            <div class="flex items-center gap-2 relative z-40 w-full pt-1">
               <!-- All Button -->
               <button
                 type="button"
@@ -717,6 +849,29 @@ function toggleRole() {
         </div>
       </div>
     </Transition>
+
+    <!-- Community & Subscriptions Modals -->
+    <GroupOrderModal
+      :is-open="isGroupModalOpen"
+      :user="props.user"
+      :foods="filteredFoods"
+      @close="isGroupModalOpen = false"
+      @order-placed="(o) => navigateTo('order_status', { order: o })"
+      @toast="(m) => emit('action', { action: 'toast', payload: { message: m } })"
+    />
+
+    <NotificationModal
+      :is-open="isNotificationModalOpen"
+      @close="isNotificationModalOpen = false"
+      @toast="(m) => emit('action', { action: 'toast', payload: { message: m } })"
+    />
+
+    <SubscriptionModal
+      :is-open="isSubscriptionModalOpen"
+      :user="props.user"
+      @close="isSubscriptionModalOpen = false"
+      @toast="(m) => emit('action', { action: 'toast', payload: { message: m } })"
+    />
   </div>
 </template>
 

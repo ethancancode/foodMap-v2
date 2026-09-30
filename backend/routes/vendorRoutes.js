@@ -8,6 +8,11 @@ const router = Router();
 
 router.get('/', vendorController.getVendors);
 router.get('/me', protect, vendorController.getMyVendorProfile);
+router.get('/me/analytics', protect, vendorController.getVendorAnalytics);
+router.get('/me/demand-prediction', protect, vendorController.getDemandPrediction);
+router.get('/:id/analytics', optionalAuth, vendorController.getVendorAnalytics);
+router.get('/:id/demand-prediction', optionalAuth, vendorController.getDemandPrediction);
+router.post('/:id/follow', protect, vendorController.toggleFollowVendor);
 router.get('/:id', vendorController.getVendorById);
 router.get('/:id/reviews', vendorController.getReviews);
 router.post('/:id/reviews', optionalAuth, vendorController.submitReview);

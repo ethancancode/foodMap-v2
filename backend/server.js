@@ -17,6 +17,10 @@ import availabilityRoutes from './routes/availabilityRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import subscriptionRoutes from './routes/subscriptionRoutes.js';
+import groupOrderRoutes from './routes/groupOrderRoutes.js';
+import sustainabilityRoutes from './routes/sustainabilityRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,6 +74,10 @@ app.use('/api/availability', availabilityRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/group-orders', groupOrderRoutes);
+app.use('/api/sustainability', sustainabilityRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
