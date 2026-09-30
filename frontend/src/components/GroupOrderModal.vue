@@ -1,11 +1,16 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { groupOrderApi } from '../services/api.js'
+import { ref, computed, watch } from 'vue'
+import { foodApi, groupOrderApi } from '../services/api.js'
 import { getSocket } from '../services/socket.js'
+import ResidentFoodCard from './ResidentFoodCard.vue'
 
 const props = defineProps({
   isOpen: Boolean,
   user: Object,
+  foods: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['close', 'order-placed', 'toast'])
@@ -14,6 +19,52 @@ const mode = ref('hub') // 'hub' | 'create' | 'join' | 'view'
 const groupCodeInput = ref('')
 const currentGroup = ref(null)
 const isLoading = ref(false)
+const addingFoodId = ref('')
+const groupFoods = ref([])
+const selectableFoods = computed(() => (props.foods.length ? props.foods : groupFoods.value).filter((food) =>
+  food.available !== false && Number(food.quantity) > 0 && food.fulfillmentOptions !== 'PICKUP_ONLY'
+))
+
+const groupItems = computed(() => currentGroup.value?.members?.flatMap((member) =>
+  (member.items || []).map((item) => ({ ...item, member }))
+) || [])
+const groupTotal = computed(() => currentGroup.value?.total ?? groupItems.value.reduce(
+  (total, item) => total + Number(item.price) * Number(item.quantity),
+  0
+))
+const currentUserId = computed(() => String(props.user?._id || props.user?.id || ''))
+const isHost = computed(() => {
+  const hostId = currentGroup.value?.host?._id || currentGroup.value?.host
+  return Boolean(hostId && String(hostId) === currentUserId.value)
+})
+const hasGroupItems = computed(() => groupItems.value.length > 0)
+
+function memberId(member) {
+  return String(member?.user?._id || member?.user || '')
+}
+
+function isOwnItem(item) {
+  return memberId(item.member) === currentUserId.value
+}
+
+function setCurrentGroup(response) {
+  currentGroup.value = response.group || response.data
+}
+
+async function loadGroupFoods() {
+  try {
+    const response = await foodApi.getFoods()
+    groupFoods.value = response.foods.filter((food) =>
+      food.available !== false && Number(food.quantity) > 0 && food.fulfillmentOptions !== 'PICKUP_ONLY'
+    )
+  } catch (err) {
+    emit('toast', err.message || 'Could not load available food')
+  }
+}
+
+watch(() => props.isOpen, (isOpen) => {
+  if (isOpen && groupFoods.value.length === 0) loadGroupFoods()
+}, { immediate: true })
 
 async function handleCreateGroup() {
   try {
@@ -21,7 +72,7 @@ async function handleCreateGroup() {
     const res = await groupOrderApi.create({
       deliveryAddress: props.user?.location?.address || 'Shared Neighborhood Hub',
     })
-    currentGroup.value = res.group || res.data
+    setCurrentGroup(res)
     mode.value = 'view'
     listenToGroup(currentGroup.value.code)
     emit('toast', `Group order ${currentGroup.value.code} created! Share this code with neighbors.`)
@@ -38,7 +89,7 @@ async function handleJoinGroup() {
     isLoading.value = true
     const code = groupCodeInput.value.trim().toUpperCase()
     const res = await groupOrderApi.join(code, { name: props.user?.name || 'Neighbor' })
-    currentGroup.value = res.group || res.data
+    setCurrentGroup(res)
     mode.value = 'view'
     listenToGroup(code)
     emit('toast', `Joined group ${code}!`)
@@ -50,7 +101,7 @@ async function handleJoinGroup() {
 }
 
 async function handleCheckoutGroup() {
-  if (!currentGroup.value) return
+  if (!currentGroup.value || !isHost.value || !hasGroupItems.value) return
   try {
     isLoading.value = true
     const res = await groupOrderApi.checkout(currentGroup.value.code, {
@@ -61,6 +112,46 @@ async function handleCheckoutGroup() {
     emit('close')
   } catch (err) {
     emit('toast', err.message || 'Could not place group order')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function handleAddItem(food) {
+  if (!currentGroup.value || !food?._id) return
+  try {
+    addingFoodId.value = food._id
+    const response = await groupOrderApi.addItem(currentGroup.value.code, { foodId: food._id, quantity: 1 })
+    setCurrentGroup(response)
+    emit('toast', `${food.name} added to the Group Meal`)
+  } catch (err) {
+    emit('toast', err.response?.data?.message || err.message || 'Could not add this food')
+  } finally {
+    addingFoodId.value = ''
+  }
+}
+
+async function handleQuantityChange(item, quantity) {
+  if (!currentGroup.value || !isOwnItem(item)) return
+  try {
+    isLoading.value = true
+    const response = await groupOrderApi.updateItem(currentGroup.value.code, item.food?._id || item.food, { quantity })
+    setCurrentGroup(response)
+  } catch (err) {
+    emit('toast', err.response?.data?.message || err.message || 'Could not update quantity')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function handleRemoveItem(item) {
+  if (!currentGroup.value || !isOwnItem(item)) return
+  try {
+    isLoading.value = true
+    const response = await groupOrderApi.removeItem(currentGroup.value.code, item.food?._id || item.food)
+    setCurrentGroup(response)
+  } catch (err) {
+    emit('toast', err.response?.data?.message || err.message || 'Could not remove item')
   } finally {
     isLoading.value = false
   }
@@ -86,7 +177,7 @@ function copyCode() {
 
 <template>
   <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in">
-    <div class="relative w-full max-w-lg bg-surface rounded-3xl border border-outline-variant/30 shadow-2xl p-6 space-y-6">
+    <div class="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-surface rounded-3xl border border-outline-variant/30 shadow-2xl p-6 space-y-6">
       <!-- Close Button -->
       <button
         @click="emit('close')"
@@ -201,11 +292,51 @@ function copyCode() {
           </div>
         </div>
 
+        <div class="space-y-3">
+          <div class="flex items-center justify-between text-xs font-bold text-on-surface">
+            <span>Group Meal Items</span>
+            <span>₹{{ Number(groupTotal).toFixed(2) }}</span>
+          </div>
+          <p v-if="!hasGroupItems" class="text-xs text-on-surface-variant">Choose available food below to start this order.</p>
+          <div v-else class="divide-y divide-outline-variant/20 border-y border-outline-variant/20">
+            <div v-for="item in groupItems" :key="`${memberId(item.member)}-${item.food?._id || item.food}`" class="py-2 flex items-center gap-3 text-xs">
+              <img :src="item.food?.image" :alt="item.name" class="w-11 h-11 rounded-lg object-cover bg-surface-container" />
+              <div class="min-w-0 flex-1">
+                <div class="font-bold text-on-surface truncate">{{ item.name }}</div>
+                <div class="text-on-surface-variant">{{ item.member.name }} · ₹{{ Number(item.price).toFixed(2) }} each</div>
+              </div>
+              <template v-if="isOwnItem(item)">
+                <button type="button" :disabled="isLoading || item.quantity <= 1" @click="handleQuantityChange(item, item.quantity - 1)" class="w-7 h-7 rounded-lg border border-outline-variant/40 text-on-surface disabled:opacity-40">−</button>
+                <span class="w-5 text-center font-bold">{{ item.quantity }}</span>
+                <button type="button" :disabled="isLoading" @click="handleQuantityChange(item, item.quantity + 1)" class="w-7 h-7 rounded-lg border border-outline-variant/40 text-on-surface">+</button>
+                <button type="button" :disabled="isLoading" title="Remove item" @click="handleRemoveItem(item)" class="w-7 h-7 rounded-lg text-on-surface-variant hover:bg-surface-container">×</button>
+              </template>
+              <span v-else class="font-bold text-on-surface">×{{ item.quantity }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <div class="text-xs font-bold text-on-surface">Available Food</div>
+          <p v-if="selectableFoods.length === 0" class="text-xs text-on-surface-variant">No delivery-eligible food is currently available.</p>
+          <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <ResidentFoodCard
+              v-for="food in selectableFoods"
+              :key="food._id || food.id"
+              :item="food"
+              group-order-active
+              :adding-food-id="addingFoodId"
+              @select="() => {}"
+              @add-to-group="handleAddItem"
+            />
+          </div>
+        </div>
+
         <!-- Coordinated Checkout Button -->
         <div class="pt-2">
           <button
             @click="handleCheckoutGroup"
-            :disabled="isLoading"
+            :disabled="isLoading || !isHost || !hasGroupItems || currentGroup.status !== 'OPEN'"
             class="w-full py-3 rounded-2xl bg-primary text-on-primary text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 cursor-pointer transition-all hover:brightness-105"
           >
             <span class="material-symbols-outlined text-[18px]">shopping_cart_checkout</span>

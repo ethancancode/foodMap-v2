@@ -96,6 +96,8 @@ export const groupOrderApi = {
   getByCode: (code) => api.get(`/group-orders/${code}`).then((r) => r.data),
   join: (code, data) => api.post(`/group-orders/${code}/join`, data).then((r) => r.data),
   addItem: (code, item) => api.post(`/group-orders/${code}/items`, item).then((r) => r.data),
+  updateItem: (code, foodId, item) => api.patch(`/group-orders/${code}/items/${foodId}`, item).then((r) => r.data),
+  removeItem: (code, foodId) => api.delete(`/group-orders/${code}/items/${foodId}`).then((r) => r.data),
   checkout: (code, options) => api.post(`/group-orders/${code}/checkout`, options).then((r) => r.data),
 };
 

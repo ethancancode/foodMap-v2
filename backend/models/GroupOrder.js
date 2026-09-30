@@ -8,7 +8,7 @@ const groupOrderItemSchema = new mongoose.Schema({
   },
   name: { type: String, required: true },
   price: { type: Number, required: true },
-  quantity: { type: Number, default: 1 },
+  quantity: { type: Number, required: true, default: 1, min: 1 },
 });
 
 const groupOrderMemberSchema = new mongoose.Schema({
@@ -52,6 +52,11 @@ const groupOrderSchema = new mongoose.Schema(
     deliveryAddress: {
       type: String,
       default: '',
+    },
+    total: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     members: [groupOrderMemberSchema],
     placedOrder: {

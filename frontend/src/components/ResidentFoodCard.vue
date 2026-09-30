@@ -8,9 +8,17 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  groupOrderActive: {
+    type: Boolean,
+    default: false,
+  },
+  addingFoodId: {
+    type: String,
+    default: '',
+  },
 })
 
-const emit = defineEmits(['select'])
+const emit = defineEmits(['select', 'add-to-group'])
 
 const countdown = computed(() => {
   void currentTimestamp.value
@@ -111,6 +119,16 @@ const countdown = computed(() => {
           >verified</span>
         </div>
       </div>
+
+      <button
+        v-if="groupOrderActive"
+        type="button"
+        :disabled="addingFoodId === (item._id || item.id)"
+        @click.stop="emit('add-to-group', item)"
+        class="w-full py-2 rounded-xl bg-primary text-on-primary text-xs font-bold cursor-pointer disabled:opacity-50"
+      >
+        {{ addingFoodId === (item._id || item.id) ? 'Adding...' : 'Add to Group Meal' }}
+      </button>
 
       <!-- Allergen Warning Pill -->
       <div v-if="item.allergens && item.allergens.length > 0" class="flex items-center gap-1 text-[10.5px] font-semibold text-amber-800 bg-amber-50/80 px-2 py-0.5 rounded-md border border-amber-200/50">

@@ -854,6 +854,7 @@ function toggleRole() {
     <GroupOrderModal
       :is-open="isGroupModalOpen"
       :user="props.user"
+      :foods="filteredFoods"
       @close="isGroupModalOpen = false"
       @order-placed="(o) => navigateTo('order_status', { order: o })"
       @toast="(m) => emit('action', { action: 'toast', payload: { message: m } })"
