@@ -109,4 +109,29 @@ export function onLocationUpdated(cb) {
   return () => s.off('location:updated', handler);
 }
 
+export function onDeliveryLocationUpdated(cb) {
+  const s = getSocket();
+  const handler = (data) => cb(data);
+  s.on('delivery:locationUpdated', handler);
+  return () => s.off('delivery:locationUpdated', handler);
+}
+
+export function onDeliveryAssigned(cb) {
+  const s = getSocket();
+  const handler = (data) => cb(data);
+  s.on('delivery:assigned', handler);
+  return () => s.off('delivery:assigned', handler);
+}
+
+export function emitCourierLocation(payload) {
+  const s = getSocket();
+  s.emit('delivery:location', payload);
+}
+
+export function subscribeToCourier(courierId) {
+  const s = getSocket();
+  s.emit('courier:join', courierId);
+}
+
 export default getSocket;
+

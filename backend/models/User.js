@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['resident', 'vendor', 'admin'],
+      enum: ['resident', 'vendor', 'delivery_partner', 'admin'],
       default: 'resident',
     },
     gender: {
@@ -53,6 +53,20 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    allergies: {
+      type: [String],
+      default: [],
+    },
+    followedVendors: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Vendor',
+      },
+    ],
     location: {
       type: {
         type: String,

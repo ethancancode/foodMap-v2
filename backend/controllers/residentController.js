@@ -101,3 +101,28 @@ export async function vouchVendor(req, res, next) {
     next(err);
   }
 }
+
+export async function getRecommendations(req, res, next) {
+  try {
+    const { getResidentRecommendations } = await import('../services/recommendationService.js');
+    const recommendations = await getResidentRecommendations(req.user?._id || req.query.userId || null);
+    res.json({ success: true, count: recommendations.length, data: recommendations, foods: recommendations });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateAllergies(req, res, next) {
+  try {
+    const { allergies } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { allergies: Array.isArray(allergies) ? allergies : [] },
+      { returnDocument: 'after' }
+    );
+    res.json({ success: true, message: 'Allergy preferences updated', allergies: user.allergies });
+  } catch (err) {
+    next(err);
+  }
+}
+

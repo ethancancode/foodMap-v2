@@ -246,5 +246,100 @@ export async function getOrderById(id) {
       select: 'businessName category pickupAddress location rating totalReviews user',
       populate: { path: 'user', select: 'name phone email avatar' }
     })
-    .populate('resident', 'name phone location');
+    .populate('resident', 'name phone location')
+    .populate('deliveryPartner', 'name phone location');
 }
+
+export async function getAvailableDeliveries() {
+  return await Order.find({
+    orderType: 'DELIVERY',
+    status: { $in: ['ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP'] },
+    deliveryStatus: { $in: ['UNASSIGNED', null] },
+  })
+    .populate({
+      path: 'vendor',
+      select: 'businessName pickupAddress location phone user',
+      populate: { path: 'user', select: 'name phone' },
+    })
+    .populate('resident', 'name phone location')
+    .sort({ createdAt: -1 });
+}
+
+export async function getMyDeliveries(courierUserId) {
+  return await Order.find({
+    deliveryPartner: courierUserId,
+  })
+    .populate({
+      path: 'vendor',
+      select: 'businessName pickupAddress location phone user',
+      populate: { path: 'user', select: 'name phone' },
+    })
+    .populate('resident', 'name phone location')
+    .sort({ updatedAt: -1 });
+}
+
+export async function acceptDeliveryAssignment(orderId, courierUser) {
+  const order = await Order.findById(orderId);
+  if (!order) {
+    throw new Error('Order not found');
+  }
+  if (order.deliveryPartner && order.deliveryPartner.toString() !== courierUser._id.toString()) {
+    throw new Error('This delivery has already been assigned to another courier');
+  }
+
+  order.deliveryPartner = courierUser._id;
+  order.deliveryPartnerName = courierUser.name || 'Delivery Partner';
+  order.deliveryPartnerPhone = courierUser.phone || '';
+  order.deliveryStatus = 'ASSIGNED';
+  order.timeline.push({
+    status: 'DELIVERY_ASSIGNED',
+    timestamp: new Date(),
+    note: `Delivery partner ${courierUser.name || 'Courier'} assigned to this order`,
+  });
+
+  await order.save();
+  return await getOrderById(order._id);
+}
+
+export async function updateDeliveryStatus(orderId, status, courierUserId) {
+  const order = await Order.findById(orderId);
+  if (!order) {
+    throw new Error('Order not found');
+  }
+  if (order.deliveryPartner && order.deliveryPartner.toString() !== courierUserId.toString()) {
+    throw new Error('Not authorized to update this delivery');
+  }
+
+  const validStatuses = ['PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'];
+  if (!validStatuses.includes(status)) {
+    throw new Error(`Invalid delivery status: ${status}`);
+  }
+
+  order.deliveryStatus = status;
+  order.status = status;
+  order.timeline.push({
+    status,
+    timestamp: new Date(),
+    note: `Order status updated to ${status} by delivery partner`,
+  });
+
+  await order.save();
+  return await getOrderById(order._id);
+}
+
+export async function updateDeliveryLocation(orderId, coordinates, address) {
+  const order = await Order.findById(orderId);
+  if (!order) {
+    throw new Error('Order not found');
+  }
+
+  order.deliveryPartnerLocation = {
+    coordinates,
+    address: address || '',
+    updatedAt: new Date(),
+  };
+
+  await order.save();
+  return order;
+}
+

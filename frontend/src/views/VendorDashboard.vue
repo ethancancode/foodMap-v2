@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { foodApi, orderApi, vendorApi } from '../services/api.js'
+import { foodApi, orderApi, vendorApi, subscriptionApi } from '../services/api.js'
 import {
   onFoodAvailabilityUpdated,
   onFoodNewPosted,
@@ -18,6 +18,7 @@ import AppHeader from '../components/AppHeader.vue'
 import VendorFoodCard from '../components/VendorFoodCard.vue'
 import VendorIncomingOrderRow from '../components/VendorIncomingOrderRow.vue'
 import EditDishModal from '../components/EditDishModal.vue'
+import VendorPlanModal from '../components/VendorPlanModal.vue'
 
 // Computed that re-evaluates every second as currentTimestamp ticks
 const countdown = computed(() => {
@@ -32,11 +33,73 @@ const props = defineProps({
 
 const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
+const activeVendorTab = ref('dishes') // 'dishes' | 'demand' | 'subscriptions' | 'marketplace' | 'analytics'
 const listings = ref([])
 const incomingOrders = ref([])
 const isLoading = ref(true)
 const vendorProfile = ref(null)
 const isMobileSidebarOpen = ref(false)
+
+const demandData = ref(null)
+const isDemandLoading = ref(false)
+const vendorPlans = ref([])
+const vendorSubscribers = ref([])
+const isPlansLoading = ref(false)
+const isPlanModalOpen = ref(false)
+const analyticsData = ref(null)
+const isAnalyticsLoading = ref(false)
+
+async function fetchDemandPrediction() {
+  try {
+    isDemandLoading.value = true
+    const res = await vendorApi.getDemandPrediction()
+    demandData.value = res
+  } catch (err) {
+    console.warn('[Demand] Error:', err.message)
+  } finally {
+    isDemandLoading.value = false
+  }
+}
+
+async function fetchSubscriptionsData() {
+  try {
+    isPlansLoading.value = true
+    const [plansRes, subsRes] = await Promise.all([
+      subscriptionApi.getPlans({ vendor: vendorProfile.value?._id || props.user?.vendor?._id || props.user?.vendor }),
+      subscriptionApi.getVendorSubscriptions(vendorProfile.value?._id || props.user?.vendor?._id || props.user?.vendor).catch(() => null),
+    ])
+    vendorPlans.value = plansRes?.plans || plansRes?.data || []
+    vendorSubscribers.value = subsRes?.subscriptions || subsRes?.data || []
+  } catch (err) {
+    console.warn('[Subscriptions] Error:', err.message)
+  } finally {
+    isPlansLoading.value = false
+  }
+}
+
+async function fetchAnalyticsData() {
+  try {
+    isAnalyticsLoading.value = true
+    const res = await vendorApi.getAnalytics()
+    analyticsData.value = res?.analytics || res?.data || null
+  } catch (err) {
+    console.warn('[Analytics] Error:', err.message)
+  } finally {
+    isAnalyticsLoading.value = false
+  }
+}
+
+function handleTabChange(tab) {
+  activeVendorTab.value = tab
+  if (tab === 'demand' && !demandData.value) {
+    fetchDemandPrediction()
+  } else if (tab === 'subscriptions' && vendorPlans.value.length === 0) {
+    fetchSubscriptionsData()
+  } else if (tab === 'analytics' && !analyticsData.value) {
+    fetchAnalyticsData()
+  }
+}
+
 
 function isItemAvailable(item) {
   if (!item) return false
@@ -450,8 +513,32 @@ function handleToast(message) {
               </button>
             </section>
 
-            <!-- Active Listings Section -->
-            <section class="flex flex-col gap-3 relative z-10 w-full mt-1">
+            <!-- Dashboard Navigation Tabs -->
+            <div class="flex items-center gap-2 border-b border-outline-variant/20 pb-2 overflow-x-auto no-scrollbar pt-2">
+              <button
+                v-for="t in [
+                  { id: 'dishes', label: 'Live Dishes', icon: 'soup_kitchen' },
+                  { id: 'demand', label: 'Demand Forecast', icon: 'trending_up' },
+                  { id: 'subscriptions', label: 'Meal Subscriptions', icon: 'event_repeat' },
+                  { id: 'marketplace', label: 'Marketplace Goods', icon: 'store' },
+                  { id: 'analytics', label: 'Kitchen Analytics', icon: 'monitoring' },
+                ]"
+                :key="t.id"
+                @click="handleTabChange(t.id)"
+                :class="[
+                  'px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap',
+                  activeVendorTab === t.id
+                    ? 'bg-primary text-on-primary shadow-sm'
+                    : 'bg-surface-container-low text-on-surface-variant hover:text-on-surface'
+                ]"
+              >
+                <span class="material-symbols-outlined text-[16px]">{{ t.icon }}</span>
+                <span>{{ t.label }}</span>
+              </button>
+            </div>
+
+            <!-- Tab 1: Active Listings Section -->
+            <section v-if="activeVendorTab === 'dishes'" class="flex flex-col gap-3 relative z-10 w-full mt-1 animate-in">
               <div class="flex items-center justify-between">
                 <div>
                   <h2 class="text-base sm:text-lg font-extrabold text-on-surface">Your Live Radar Batches</h2>
@@ -459,14 +546,14 @@ function handleToast(message) {
                 </div>
                 <div class="flex items-center gap-1.5 text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full text-xs font-bold">
                   <span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
-                  <span>{{ listings.length }} Dishes</span>
+                  <span>{{ listings.filter(f => !f.isMarketplace).length }} Dishes</span>
                 </div>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full">
                 <!-- Empty State -->
                 <div
-                  v-if="listings.length === 0"
+                  v-if="listings.filter(f => !f.isMarketplace).length === 0"
                   class="col-span-full py-12 px-6 flex flex-col items-center justify-center text-center bg-surface-container-lowest rounded-3xl border border-dashed border-outline-variant/50"
                 >
                   <div class="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-3">
@@ -486,7 +573,7 @@ function handleToast(message) {
                 </div>
 
                 <VendorFoodCard
-                  v-for="item in listings"
+                  v-for="item in listings.filter(f => !f.isMarketplace)"
                   :key="item._id || item.id"
                   :item="item"
                   @edit="openEditModal"
@@ -496,6 +583,262 @@ function handleToast(message) {
                 />
               </div>
             </section>
+
+            <!-- Tab 2: Demand Prediction -->
+            <section v-if="activeVendorTab === 'demand'" class="space-y-4 animate-in">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h2 class="text-base sm:text-lg font-extrabold text-on-surface">Lightweight Demand Prediction</h2>
+                  <p class="text-xs text-on-surface-variant">Forecast based on historical day-of-week orders and active subscriber tiffins</p>
+                </div>
+                <button
+                  @click="fetchDemandPrediction"
+                  class="p-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-semibold cursor-pointer"
+                >
+                  <span class="material-symbols-outlined text-[16px]">refresh</span>
+                </button>
+              </div>
+
+              <div v-if="demandData" class="space-y-4">
+                <!-- Highlights Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                    <span class="text-[11px] font-bold text-on-surface-variant">Expected Total Demand</span>
+                    <div class="text-2xl font-black text-primary mt-1">~{{ demandData.totalExpectedMeals }} Meals</div>
+                    <span class="text-[10.5px] text-on-surface-variant">Includes {{ demandData.subscriberCount }} active subscribers</span>
+                  </div>
+
+                  <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                    <span class="text-[11px] font-bold text-on-surface-variant">Recommended Preparation</span>
+                    <div class="text-2xl font-black text-green-700 mt-1">{{ demandData.totalRecommendedPrep }} Meals</div>
+                    <span class="text-[10.5px] text-green-800 font-semibold">+10% safety buffer for radar walk-ins</span>
+                  </div>
+
+                  <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                    <span class="text-[11px] font-bold text-on-surface-variant">Peak Ordering Window</span>
+                    <div class="text-sm font-extrabold text-on-surface mt-2">{{ demandData.peakOrderWindow }}</div>
+                    <span class="text-[10.5px] text-on-surface-variant">High order concentration period</span>
+                  </div>
+                </div>
+
+                <!-- Waste Reduction Advice Banner -->
+                <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex items-start gap-3">
+                  <span class="material-symbols-outlined text-emerald-700 text-[22px] shrink-0 mt-0.5">compost</span>
+                  <div class="text-xs">
+                    <span class="font-extrabold">Zero Food-Waste Recommendation:</span>
+                    <p class="mt-0.5 text-emerald-800 leading-relaxed">{{ demandData.wasteReductionAdvice }}</p>
+                  </div>
+                </div>
+
+                <!-- Per-Dish Forecast Breakdown -->
+                <div class="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 overflow-hidden shadow-sm">
+                  <div class="p-3.5 bg-surface-container-low border-b border-outline-variant/20 font-bold text-xs">
+                    Dish Demand Projections
+                  </div>
+                  <div class="divide-y divide-outline-variant/10 text-xs">
+                    <div
+                      v-for="pred in demandData.itemPredictions"
+                      :key="pred.foodId"
+                      class="p-3.5 flex items-center justify-between flex-wrap gap-2 hover:bg-surface-container/30"
+                    >
+                      <div>
+                        <div class="font-bold text-on-surface">{{ pred.name }}</div>
+                        <div class="text-[11px] text-on-surface-variant">
+                          Subscribers: {{ pred.subscriberPortions }} • Normal Orders: ~{{ pred.normalOrdersPortion }}
+                        </div>
+                      </div>
+
+                      <div class="flex items-center gap-3">
+                        <div class="text-right">
+                          <span class="text-[11px] text-on-surface-variant">Prep Recommendation: </span>
+                          <span class="font-extrabold text-primary">{{ pred.recommendedPrep }} portions</span>
+                        </div>
+                        <span
+                          :class="[
+                            'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
+                            pred.stockStatus === 'WELL_STOCKED' ? 'bg-green-100 text-green-800' :
+                            pred.stockStatus === 'OPTIMAL' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                          ]"
+                        >
+                          {{ pred.stockStatus.replace('_', ' ') }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Tab 3: Meal Subscriptions -->
+            <section v-if="activeVendorTab === 'subscriptions'" class="space-y-4 animate-in">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h2 class="text-base sm:text-lg font-extrabold text-on-surface">Meal Subscriptions & Tiffins</h2>
+                  <p class="text-xs text-on-surface-variant">Manage recurring meal plans and reserved subscriber priority allocations</p>
+                </div>
+
+                <button
+                  @click="isPlanModalOpen = true"
+                  class="px-3.5 py-2 rounded-xl bg-primary hover:opacity-90 text-white text-xs font-bold shadow-sm transition-opacity flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span class="material-symbols-outlined text-[16px]">add</span>
+                  <span>Create Meal Plan</span>
+                </button>
+              </div>
+
+              <!-- Plans Grid -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  v-for="plan in vendorPlans"
+                  :key="plan._id"
+                  class="p-4 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-sm space-y-3"
+                >
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <h3 class="text-sm font-extrabold text-on-surface">{{ plan.name }}</h3>
+                      <span class="text-xs text-primary font-bold">₹{{ plan.price }}/{{ plan.duration }}</span>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-surface-container text-on-surface border border-outline-variant/30">
+                      {{ plan.currentSubscribers || 0 }}/{{ plan.maxSubscribers }} Active
+                    </span>
+                  </div>
+
+                  <p class="text-xs text-on-surface-variant line-clamp-2">{{ plan.description }}</p>
+
+                  <div class="p-2.5 rounded-xl bg-surface-container/70 border border-outline-variant/20 text-[11px] text-on-surface font-semibold flex items-center justify-between">
+                    <span>Priority Allocation:</span>
+                    <span class="font-black text-primary">{{ plan.subscriberPriorityAllocation || 15 }} portions guaranteed</span>
+                  </div>
+                </div>
+
+                <div v-if="vendorPlans.length === 0" class="col-span-full p-8 text-center text-xs text-on-surface-variant bg-surface-container-lowest rounded-2xl border border-dashed border-outline-variant/40">
+                  You haven't created any subscription plans yet. Tap "Create Meal Plan" to start offering weekly or monthly tiffins!
+                </div>
+              </div>
+
+              <!-- Active Subscribers Table -->
+              <div v-if="vendorSubscribers.length > 0" class="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 overflow-hidden shadow-sm mt-4">
+                <div class="p-3.5 bg-surface-container-low border-b border-outline-variant/20 font-bold text-xs">
+                  Active Enrolled Subscribers
+                </div>
+                <div class="divide-y divide-outline-variant/10 text-xs">
+                  <div
+                    v-for="sub in vendorSubscribers"
+                    :key="sub._id"
+                    class="p-3.5 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <div class="font-bold text-on-surface">{{ sub.resident?.name || 'Resident Subscriber' }}</div>
+                      <div class="text-[11px] text-on-surface-variant">Plan: {{ sub.plan?.name }}</div>
+                    </div>
+                    <div class="text-right">
+                      <span class="font-bold text-primary">{{ sub.mealsRemaining }} meals left</span>
+                      <div class="text-[10px] text-on-surface-variant">Expires {{ new Date(sub.endDate).toLocaleDateString() }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Tab 4: Marketplace Goods -->
+            <section v-if="activeVendorTab === 'marketplace'" class="space-y-4 animate-in">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h2 class="text-base sm:text-lg font-extrabold text-on-surface">Marketplace & Packaged Goods</h2>
+                  <p class="text-xs text-on-surface-variant">Homemade snacks, pickles, jams, sourdough loaves, and artisanal pantry items</p>
+                </div>
+
+                <button
+                  @click="navigateTo('post_new_food')"
+                  class="px-3.5 py-2 rounded-xl bg-primary hover:opacity-90 text-white text-xs font-bold shadow-sm transition-opacity flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span class="material-symbols-outlined text-[16px]">add</span>
+                  <span>Add Marketplace Item</span>
+                </button>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full">
+                <VendorFoodCard
+                  v-for="item in listings.filter(f => f.isMarketplace)"
+                  :key="item._id || item.id"
+                  :item="item"
+                  @edit="openEditModal"
+                  @delete="deleteFoodItem"
+                  @adjust-portion="({ item, delta }) => adjustPortion(item, delta)"
+                  @toggle-sold-out="toggleSoldOut"
+                />
+
+                <div v-if="listings.filter(f => f.isMarketplace).length === 0" class="col-span-full p-8 text-center text-xs text-on-surface-variant bg-surface-container-lowest rounded-2xl border border-dashed border-outline-variant/40">
+                  No packaged marketplace products listed yet. You can sell homemade pickles, dry snacks, cookies, or bakery products!
+                </div>
+              </div>
+            </section>
+
+            <!-- Tab 5: Kitchen Analytics -->
+            <section v-if="activeVendorTab === 'analytics'" class="space-y-4 animate-in">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h2 class="text-base sm:text-lg font-extrabold text-on-surface">Kitchen Performance & Sustainability</h2>
+                  <p class="text-xs text-on-surface-variant">Order lifecycle, customer loyalty, and portions rescued from food waste</p>
+                </div>
+              </div>
+
+              <div v-if="analyticsData" class="space-y-4">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                    <span class="text-[11px] font-bold text-on-surface-variant">Total Orders</span>
+                    <div class="text-xl font-black text-on-surface mt-1">{{ analyticsData.totalOrders }}</div>
+                    <span class="text-[10px] text-green-700 font-semibold">{{ analyticsData.completedOrders }} completed</span>
+                  </div>
+
+                  <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                    <span class="text-[11px] font-bold text-on-surface-variant">Estimated Revenue</span>
+                    <div class="text-xl font-black text-primary mt-1">₹{{ analyticsData.totalRevenue }}</div>
+                    <span class="text-[10px] text-on-surface-variant">Dishes + Marketplace</span>
+                  </div>
+
+                  <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                    <span class="text-[11px] font-bold text-on-surface-variant">Repeat Customers</span>
+                    <div class="text-xl font-black text-on-surface mt-1">{{ analyticsData.repeatCustomers }}</div>
+                    <span class="text-[10px] text-primary font-semibold">Loyal neighborhood residents</span>
+                  </div>
+
+                  <div class="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/20">
+                    <span class="text-[11px] font-bold text-on-surface-variant">Portions Rescued</span>
+                    <div class="text-xl font-black text-green-700 mt-1">{{ analyticsData.surplusRescuedPortions }}</div>
+                    <span class="text-[10px] text-green-800 font-semibold">Zero-waste portions saved</span>
+                  </div>
+                </div>
+
+                <!-- Top Selling Dishes -->
+                <div class="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 p-4 space-y-3">
+                  <span class="text-xs font-bold text-on-surface">Top Selling Meals & Products</span>
+                  <div class="space-y-2">
+                    <div
+                      v-for="(item, idx) in analyticsData.topSelling"
+                      :key="item.name"
+                      class="flex items-center justify-between text-xs py-1 border-b border-outline-variant/10 last:border-0"
+                    >
+                      <div class="flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-[10px]">
+                          {{ idx + 1 }}
+                        </span>
+                        <span class="font-bold text-on-surface">{{ item.name }}</span>
+                      </div>
+                      <span class="font-extrabold text-on-surface-variant">{{ item.count }} sold</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Vendor Plan Creation Modal -->
+            <VendorPlanModal
+              :is-open="isPlanModalOpen"
+              @close="isPlanModalOpen = false"
+              @plan-created="fetchSubscriptionsData"
+              @toast="handleToast"
+            />
 
           </div>
         </div>
