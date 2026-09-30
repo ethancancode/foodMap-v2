@@ -115,6 +115,20 @@ export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
     throw err;
   }
 
+  // Existing user role mismatch validation
+  if (user && user.isOnboarded && role) {
+    if (role === 'vendor' && user.role === 'resident') {
+      const err = new Error('This mobile number belongs to a Resident account. Please switch to Resident Sign In.');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (role === 'resident' && user.role === 'vendor') {
+      const err = new Error('This mobile number belongs to a Kitchen Vendor account. Please switch to Vendor Sign In.');
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+
   // Validate existing user password with bcrypt
   if (user.password) {
     const isMatch = await bcrypt.compare(String(password).trim(), user.password);
@@ -238,6 +252,20 @@ export async function verifyOTP(phoneOrPayload, otpArg, roleArg, nameArg) {
     const err = new Error('No account found for this phone number. Please register first');
     err.statusCode = 400;
     throw err;
+  }
+
+  const targetRole = payload.role || roleArg;
+  if (user && user.isOnboarded && targetRole) {
+    if (targetRole === 'vendor' && user.role === 'resident') {
+      const err = new Error('This mobile number belongs to a Resident account. Please switch to Resident Sign In.');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (targetRole === 'resident' && user.role === 'vendor') {
+      const err = new Error('This mobile number belongs to a Kitchen Vendor account. Please switch to Vendor Sign In.');
+      err.statusCode = 400;
+      throw err;
+    }
   }
 
   if (payload.password && user.password) {

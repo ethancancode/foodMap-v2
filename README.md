@@ -96,7 +96,7 @@ Log in via the standard authentication interface (`http://localhost:3000`) using
 | **4** | **Delivery Partner Portal** | Log in as Courier (`8888888888`). View unassigned delivery order `#FM4821`. |
 | **5** | **Courier Claim & Progression** | Click **Claim Delivery** on `#FM4821`. Progress status from `PICKED_UP` to `EN_ROUTE`. |
 | **6** | **Live Courier GPS Tracking** | Open Resident tracker (`OrderStatus.vue`) in second window. Watch courier bike marker update live via Socket.IO. |
-| **7** | **AI Recommendation Scoring** | Log in as Priya (`9820123456`). Switch Radar to "AI Recommendations". See percentage match scores. |
+| **7** | **Recommendation Scoring** | Log in as Priya (`9820123456`). Switch Radar to "Recommendations". See percentage match scores. |
 | **8** | **Allergy Shield Warning** | Priya has a nut allergy. Notice high-contrast warning badge on cashew/nut dishes. |
 | **9** | **Vendor Demand Forecasting** | Log in as Chef Ananya (`9876543210`). Open **Demand Forecast** tab to view predicted volume and peak hours. |
 | **10** | **Surplus Food Rescue & Sustainability** | Filter Radar by "Surplus Rescue". View 30% discounted evening meals and sustainability metrics. |

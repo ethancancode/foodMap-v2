@@ -587,6 +587,8 @@ function toggleRole() {
                 <span>Cooked Meals</span>
               </button>
 
+<!-- Marketplace Pantry button commented out -->
+              <!--
               <button
                 type="button"
                 @click="handleDiscoveryModeChange('marketplace')"
@@ -596,6 +598,7 @@ function toggleRole() {
                 <span class="material-symbols-outlined text-[15px]">store</span>
                 <span>Marketplace Pantry</span>
               </button>
+              -->
 
               <button
                 type="button"
