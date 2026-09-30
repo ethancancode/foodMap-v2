@@ -33,7 +33,14 @@ const props = defineProps({
 
 const emit = defineEmits(['navigate', 'action', 'role-switch'])
 
-const activeVendorTab = ref('dishes') // 'dishes' | 'demand' | 'subscriptions' | 'marketplace' | 'analytics'
+const activeVendorTab = ref('dishes') // 'dishes' | 'demand' | 'subscriptions' | 'analytics'
+const vendorTabs = [
+  { id: 'dishes', label: 'Live Dishes', icon: 'soup_kitchen' },
+  { id: 'demand', label: 'Demand Forecast', icon: 'trending_up' },
+  { id: 'subscriptions', label: 'Meal Subscriptions', icon: 'event_repeat' },
+  // { id: 'marketplace', label: 'Marketplace Goods', icon: 'store' }, // Commented out: no creation workflow in post dish form
+  { id: 'analytics', label: 'Kitchen Analytics', icon: 'monitoring' },
+]
 const listings = ref([])
 const incomingOrders = ref([])
 const isLoading = ref(true)
@@ -516,13 +523,7 @@ function handleToast(message) {
             <!-- Dashboard Navigation Tabs -->
             <div class="flex items-center gap-2 border-b border-outline-variant/20 pb-2 overflow-x-auto no-scrollbar pt-2">
               <button
-                v-for="t in [
-                  { id: 'dishes', label: 'Live Dishes', icon: 'soup_kitchen' },
-                  { id: 'demand', label: 'Demand Forecast', icon: 'trending_up' },
-                  { id: 'subscriptions', label: 'Meal Subscriptions', icon: 'event_repeat' },
-                  { id: 'marketplace', label: 'Marketplace Goods', icon: 'store' },
-                  { id: 'analytics', label: 'Kitchen Analytics', icon: 'monitoring' },
-                ]"
+                v-for="t in vendorTabs"
                 :key="t.id"
                 @click="handleTabChange(t.id)"
                 :class="[

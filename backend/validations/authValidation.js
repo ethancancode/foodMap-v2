@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const requestOtpSchema = z.object({
   phone: z.string().min(8, 'Phone number must be at least 8 characters'),
+  password: z.string().min(3, 'Password must be at least 3 characters').optional(),
   role: z.enum(['resident', 'vendor', 'delivery_partner', 'admin']).optional().default('resident'),
   name: z.string().optional(),
   businessName: z.string().optional(),
@@ -14,6 +15,7 @@ export const requestOtpSchema = z.object({
 export const verifyOtpSchema = z.object({
   phone: z.string().min(8, 'Phone number is required'),
   otp: z.string().min(6, 'Verification code must be 6 digits').max(6, 'Verification code must be 6 digits'),
+  password: z.string().optional(),
   role: z.enum(['resident', 'vendor', 'delivery_partner', 'admin']).optional(),
   name: z.string().optional(),
   businessName: z.string().optional(),

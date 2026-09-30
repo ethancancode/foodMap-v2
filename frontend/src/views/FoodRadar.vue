@@ -603,8 +603,8 @@ function toggleRole() {
                 :class="discoveryMode === 'recommendations' ? 'bg-primary text-on-primary font-bold shadow-sm' : 'bg-surface-container text-on-surface-variant hover:text-on-surface'"
                 class="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
               >
-                <span class="material-symbols-outlined text-[15px]">auto_awesome</span>
-                <span>AI Recommendations</span>
+                <span class="material-symbols-outlined text-[15px]">recommend</span>
+                <span>Recommendations</span>
               </button>
 
               <button

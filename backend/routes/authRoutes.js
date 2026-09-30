@@ -6,6 +6,7 @@ import { requestOtpSchema, verifyOtpSchema, completeOnboardingSchema } from '../
 
 const router = Router();
 
+router.post('/login', authController.login);
 router.post('/request-otp', validate(requestOtpSchema), authController.requestOTP);
 router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOTP);
 router.get('/me', protect, authController.getMe);

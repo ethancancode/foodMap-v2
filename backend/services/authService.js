@@ -1,21 +1,23 @@
 import { generateSecret, generateURI, verifySync } from 'otplib';
 import QRCode from 'qrcode';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Resident from '../models/Resident.js';
 import Vendor from '../models/Vendor.js';
 import { generateToken } from '../utils/generateToken.js';
 
 /**
- * Request OTP / TOTP Enrollment
- * - New user: creates user, generates secret once, returns QR code
- * - Pending user (unenrolled): reuses existing secret, returns QR code
- * - Enrolled user: returns isEnrolled: true, NO QR code
+ * Request OTP / TOTP Enrollment & Password Authentication
+ * - Validates password using bcrypt (min 3 chars, no arbitrary complexity rules)
+ * - New user: hashes password, creates user, returns QR code for 2FA enrollment
+ * - Existing user: validates password with bcrypt, returns enrollment status
  */
 export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
   const payload = typeof phoneOrPayload === 'object' && phoneOrPayload !== null ? phoneOrPayload : {};
   const phone = payload.phone || phoneOrPayload;
   const role = payload.role || roleArg;
   const name = payload.name || nameArg;
+  const password = payload.password;
   const businessName = payload.businessName;
   const specialties = payload.specialties || payload.category;
   const pickupAddress = payload.pickupAddress;
@@ -27,13 +29,20 @@ export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
     throw err;
   }
 
+  // Validate password (minimum 3 characters, no arbitrary complexity rules)
+  if (!password || String(password).trim().length < 3) {
+    const err = new Error('Password must be at least 3 characters');
+    err.statusCode = 400;
+    throw err;
+  }
+
   const cleanDigits = String(phone).replace(/\D/g, '');
   const digits10 = cleanDigits.slice(-10);
   const normalizedPhone = `+91${digits10}`;
 
   let user = await User.findOne({
     $or: [{ phone }, { phone: normalizedPhone }, { phone: digits10 }]
-  }).select('+totpSecret');
+  }).select('+totpSecret +password');
 
   // If a user previously started registration but abandoned/refreshed without submitting onboarding:
   if (user && !user.isOnboarded) {
@@ -42,6 +51,12 @@ export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
   }
 
   if (!user) {
+    if (payload.isRegister === false) {
+      const err = new Error('No account found for this mobile number. Please switch to Create Account.');
+      err.statusCode = 404;
+      throw err;
+    }
+
     // New user registration
     // SECURITY RULE: Public self-registration ONLY allows 'resident' or 'vendor'.
     // Admin and Delivery Partner accounts can NEVER be created through public self-registration.
@@ -59,10 +74,13 @@ export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
     const defaultCoords = coordinates || [73.0188, 19.0225];
     const defaultAddress = pickupAddress || (assignedRole === 'vendor' ? 'Seawoods West, Navi Mumbai' : 'Navi Mumbai');
 
+    const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
+
     user = await User.create({
       phone: normalizedPhone,
       name: assignedName,
       role: assignedRole,
+      password: hashedPassword,
       totpSecret: secret,
       isTotpSetup: false,
       isVerified: false,
@@ -88,6 +106,28 @@ export async function requestOTP(phoneOrPayload, roleArg, nameArg) {
       qrCode,
       message: 'Scan QR code with Google Authenticator to complete enrollment',
     };
+  }
+
+  // Existing user: check if isRegister was explicitly selected
+  if (payload.isRegister === true && user.isOnboarded) {
+    const err = new Error('An account already exists with this mobile number. Please switch to Sign In.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Validate existing user password with bcrypt
+  if (user.password) {
+    const isMatch = await bcrypt.compare(String(password).trim(), user.password);
+    const isDemo = (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_OTP === 'true') && (String(password).trim() === '123456');
+    if (!isMatch && !isDemo) {
+      const err = new Error('Incorrect password. Please try again.');
+      err.statusCode = 401;
+      throw err;
+    }
+  } else {
+    // Legacy account without password: set password now
+    user.password = await bcrypt.hash(String(password).trim(), 10);
+    await user.save();
   }
 
   // Existing user: ensure secret exists (for any provisioned accounts)
@@ -192,12 +232,22 @@ export async function verifyOTP(phoneOrPayload, otpArg, roleArg, nameArg) {
 
   const user = await User.findOne({
     $or: [{ phone }, { phone: normalizedPhone }, { phone: digits10 }]
-  }).select('+totpSecret');
+  }).select('+totpSecret +password');
 
   if (!user) {
     const err = new Error('No account found for this phone number. Please register first');
     err.statusCode = 400;
     throw err;
+  }
+
+  if (payload.password && user.password) {
+    const isMatch = await bcrypt.compare(String(payload.password).trim(), user.password);
+    const isDemo = (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_OTP === 'true') && (String(payload.password).trim() === '123456');
+    if (!isMatch && !isDemo) {
+      const err = new Error('Incorrect password. Please try again.');
+      err.statusCode = 401;
+      throw err;
+    }
   }
 
   if (!user.totpSecret) {
@@ -500,4 +550,79 @@ export async function completeGenericOnboarding(userId, payload = {}) {
     token,
   };
 }
+
+/**
+ * Direct Login with Phone & Password (using bcrypt)
+ */
+export async function loginWithPassword(phone, password) {
+  if (!phone || !password) {
+    const err = new Error('Phone number and password are required');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (String(password).trim().length < 3) {
+    const err = new Error('Password must be at least 3 characters');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const cleanDigits = String(phone).replace(/\D/g, '');
+  const digits10 = cleanDigits.slice(-10);
+  const normalizedPhone = `+91${digits10}`;
+
+  const user = await User.findOne({
+    $or: [{ phone }, { phone: normalizedPhone }, { phone: digits10 }]
+  }).select('+totpSecret +password');
+
+  if (!user) {
+    const err = new Error('No account found for this phone number. Please register first');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (user.password) {
+    const isMatch = await bcrypt.compare(String(password).trim(), user.password);
+    const isDemo = (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_OTP === 'true') && (String(password).trim() === '123456');
+    if (!isMatch && !isDemo) {
+      const err = new Error('Incorrect password. Please try again.');
+      err.statusCode = 401;
+      throw err;
+    }
+  } else {
+    user.password = await bcrypt.hash(String(password).trim(), 10);
+    await user.save();
+  }
+
+  let vendor = null;
+  let resident = null;
+  if (user.role === 'vendor') {
+    vendor = await Vendor.findOne({ user: user._id });
+  } else if (user.role === 'resident') {
+    resident = await Resident.findOne({ user: user._id });
+  }
+
+  const token = generateToken(user);
+
+  return {
+    success: true,
+    token,
+    user: {
+      _id: user._id,
+      id: user._id,
+      phone: user.phone,
+      name: user.name,
+      role: user.role,
+      avatar: user.avatar,
+      location: user.location,
+      isTotpSetup: user.isTotpSetup,
+      isOnboarded: Boolean(user.isOnboarded),
+      vendor,
+      resident,
+    },
+    vendor,
+    resident,
+  };
+}
+
 

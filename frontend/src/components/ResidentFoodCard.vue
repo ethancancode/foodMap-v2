@@ -87,7 +87,7 @@ const countdown = computed(() => {
         v-if="item.matchPercentage"
         class="absolute bottom-2.5 left-2.5 bg-surface-container-highest/95 text-on-surface border border-outline-variant/30 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 z-10 backdrop-blur-sm"
       >
-        <span class="material-symbols-outlined text-[12px] text-primary">auto_awesome</span>
+        <span class="material-symbols-outlined text-[12px] text-primary">recommend</span>
         <span>{{ item.matchPercentage }}% Match</span>
       </div>
 

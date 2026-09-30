@@ -179,7 +179,7 @@ onBeforeUnmount(() => {
                   1. Information We Collect
                 </h3>
                 <p class="text-on-surface-variant">
-                  To provide neighborhood food discovery, we collect minimal necessary data: your mobile number (used for secure OTP / TOTP authentication), display name, optional dietary preferences/allergies (for AI safety scoring), and precise location coordinates.
+                  To provide neighborhood food discovery, we collect minimal necessary data: your mobile number (used for secure OTP / TOTP authentication), display name, optional dietary preferences/allergies (for preference & allergy safety scoring), and precise location coordinates.
                 </p>
               </div>
 

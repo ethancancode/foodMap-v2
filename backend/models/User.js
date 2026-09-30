@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
   {
@@ -36,6 +37,10 @@ const userSchema = new mongoose.Schema(
     avatar: {
       type: String,
       default: '',
+    },
+    password: {
+      type: String,
+      select: false,
     },
     totpSecret: {
       type: String,
@@ -89,6 +94,11 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ location: '2dsphere' });
+
+userSchema.methods.comparePassword = async function (candidatePassword) {
+  if (!this.password) return true;
+  return bcrypt.compare(candidatePassword, this.password);
+};
 
 export const User = mongoose.models.User || mongoose.model('User', userSchema);
 export default User;

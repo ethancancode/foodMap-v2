@@ -51,16 +51,37 @@ export async function createOrder(userId, data) {
   // Atomically deduct food quantities
   const orderItems = [];
   let subtotal = 0;
+  let totalDiscount = 0;
+  let isOrderSurplus = false;
+  let maxSurplusDiscount = 0;
 
   for (const item of items) {
     const food = await deductFoodQuantity(item.foodId, Number(item.quantity) || 1);
-    const itemTotal = food.price * (Number(item.quantity) || 1);
+    const isSurplus = Boolean(food.isSurplusRescue || food.surplusStatus === 'SURPLUS');
+    const discount = (isSurplus && food.surplusDiscount > 0) ? food.surplusDiscount : 0;
+
+    if (isSurplus) {
+      isOrderSurplus = true;
+      if (discount > maxSurplusDiscount) maxSurplusDiscount = discount;
+    }
+
+    const origPrice = Number(food.price) || 0;
+    const finalUnitPrice = discount > 0
+      ? Math.max(1, Math.round(origPrice * (1 - discount / 100)))
+      : origPrice;
+
+    const qty = Number(item.quantity) || 1;
+    const itemTotal = finalUnitPrice * qty;
+    const itemDiscount = (origPrice - finalUnitPrice) * qty;
+
     subtotal += itemTotal;
+    totalDiscount += itemDiscount;
+
     orderItems.push({
       food: food._id,
       name: food.name,
-      price: food.price,
-      quantity: Number(item.quantity) || 1,
+      price: finalUnitPrice,
+      quantity: qty,
       totalPrice: itemTotal,
     });
   }
@@ -115,6 +136,9 @@ export async function createOrder(userId, data) {
     subtotal,
     deliveryFee,
     platformFee,
+    discountAmount: totalDiscount,
+    isSurplusRescue: isOrderSurplus,
+    surplusDiscount: maxSurplusDiscount,
     totalAmount,
     status: 'PENDING',
     orderType: normalizedOrderType === 'DELIVERY' ? 'DELIVERY' : 'PICKUP',

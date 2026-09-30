@@ -136,3 +136,13 @@ export async function updateProfile(req, res, next) {
     next(err);
   }
 }
+
+export async function login(req, res, next) {
+  try {
+    const { phone, password } = req.body;
+    const result = await authService.loginWithPassword(phone, password);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}

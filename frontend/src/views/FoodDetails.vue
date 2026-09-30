@@ -148,8 +148,28 @@ const foodItem = computed(() => {
     vendorId: src.vendorId || src.vendor?._id || (typeof src.vendor === 'string' ? src.vendor : null),
     fulfillmentOptions: src.fulfillmentOptions || 'BOTH',
     description: src.desc || src.description || 'Authentic homestyle delicacy freshly prepared with traditional spices.',
-    image: src.image || DEFAULT_FOOD_SVG
+    image: src.image || DEFAULT_FOOD_SVG,
+    isSurplusRescue: Boolean(src.isSurplusRescue || src.surplusStatus === 'SURPLUS'),
+    surplusDiscount: Number(src.surplusDiscount) || 0,
+    surplusStatus: src.surplusStatus || 'NORMAL',
   }
+})
+
+const isSurplusDish = computed(() => {
+  return Boolean(foodItem.value.isSurplusRescue || foodItem.value.surplusStatus === 'SURPLUS')
+})
+
+const surplusDiscountPercent = computed(() => {
+  if (!isSurplusDish.value) return 0
+  return Number(foodItem.value.surplusDiscount) || 30
+})
+
+const effectiveDishPrice = computed(() => {
+  const base = Number(foodItem.value.price) || 80
+  if (isSurplusDish.value && surplusDiscountPercent.value > 0) {
+    return Math.max(1, Math.round(base * (1 - surplusDiscountPercent.value / 100)))
+  }
+  return base
 })
 
 let unsubAvailability
@@ -195,9 +215,13 @@ function reservePortion() {
   emit('navigate', 'checkout', {
     food: {
       ...foodItem.value,
+      price: effectiveDishPrice.value,
+      originalPrice: foodItem.value.price,
+      isSurplusRescue: isSurplusDish.value,
+      surplusDiscount: surplusDiscountPercent.value,
       quantity: selectedQty.value,
       portions: currentPortions.value,
-      totalAmount: foodItem.value.price * selectedQty.value
+      totalAmount: effectiveDishPrice.value * selectedQty.value
     }
   })
 }
@@ -267,8 +291,12 @@ function reservePortion() {
                   </h1>
                   <p class="text-white/90 text-xs mt-0.5 max-w-lg line-clamp-2">{{ foodItem.description }}</p>
                 </div>
-                <div class="bg-surface text-on-surface px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl shadow-xl border-b-2 border-primary shrink-0">
-                  <span class="font-headline-lg text-lg sm:text-2xl text-primary font-black">₹{{ foodItem.price }}</span>
+                <div class="bg-surface text-on-surface px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl shadow-xl border-b-2 border-primary shrink-0 flex flex-col items-end">
+                  <div v-if="isSurplusDish && surplusDiscountPercent > 0" class="flex items-center gap-1.5">
+                    <span class="text-xs line-through text-on-surface-variant font-bold">₹{{ foodItem.price }}</span>
+                    <span class="text-[10px] font-extrabold bg-green-100 text-green-800 px-1 rounded-sm">{{ surplusDiscountPercent }}% OFF</span>
+                  </div>
+                  <span class="font-headline-lg text-lg sm:text-2xl text-primary font-black">₹{{ effectiveDishPrice }}</span>
                 </div>
               </div>
             </div>
@@ -395,7 +423,7 @@ function reservePortion() {
                   :class="currentPortions <= 0 ? 'bg-surface-container-high text-on-surface-variant cursor-not-allowed' : 'bg-primary hover:bg-primary/90 text-on-primary shadow-lg cursor-pointer active:scale-[0.98]'"
                   class="w-full py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 font-bold text-xs sm:text-sm"
                 >
-                  <span v-if="currentPortions > 0">Reserve {{ selectedQty }} Portion(s) • ₹{{ foodItem.price * selectedQty }}</span>
+                  <span v-if="currentPortions > 0">Reserve {{ selectedQty }} Portion(s) • ₹{{ effectiveDishPrice * selectedQty }}</span>
                   <span v-else>Sold Out In This Batch</span>
                   <span v-if="currentPortions > 0" class="material-symbols-outlined text-[18px]">arrow_forward</span>
                 </button>

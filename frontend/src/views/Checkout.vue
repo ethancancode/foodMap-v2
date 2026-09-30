@@ -172,7 +172,6 @@ watch(
 )
 
 const foodId = computed(() => props.food?.id || props.food?._id)
-const itemPrice = computed(() => props.food?.price || 80)
 const itemName = computed(() => props.food?.name || 'Delicious Dish')
 const vendorName = computed(() => {
   const v = props.food?.vendorName || props.food?.vendor
@@ -182,7 +181,30 @@ const vendorName = computed(() => {
 const itemImage = computed(() => props.food?.image || DEFAULT_FOOD_SVG)
 const maxAvailable = computed(() => props.food?.portions || props.food?.quantity || 10)
 
+const isSurplusRescue = computed(() => {
+  return Boolean(props.food?.isSurplusRescue || props.food?.surplusStatus === 'SURPLUS')
+})
+
+const surplusDiscountPercent = computed(() => {
+  if (!isSurplusRescue.value) return 0
+  return Number(props.food?.surplusDiscount) || 30
+})
+
+const originalUnitPrice = computed(() => {
+  return Number(props.food?.originalPrice) || Number(props.food?.price) || 80
+})
+
+const itemPrice = computed(() => {
+  if (isSurplusRescue.value && surplusDiscountPercent.value > 0) {
+    const base = Number(props.food?.originalPrice) || Number(props.food?.price) || 80
+    return Math.max(1, Math.round(base * (1 - surplusDiscountPercent.value / 100)))
+  }
+  return Number(props.food?.price) || 80
+})
+
+const originalSubtotal = computed(() => quantity.value * originalUnitPrice.value)
 const itemSubtotal = computed(() => quantity.value * itemPrice.value)
+const surplusSavings = computed(() => Math.max(0, originalSubtotal.value - itemSubtotal.value))
 const platformFee = 5
 const grandTotal = computed(() => itemSubtotal.value + deliveryFee.value + platformFee)
 
@@ -310,6 +332,10 @@ async function processPayment() {
                       </div>
                     </div>
                     <div class="text-center flex flex-col items-center justify-center bg-surface/95 backdrop-blur-md px-3.5 py-1.5 rounded-xl shadow-md shrink-0">
+                      <div v-if="isSurplusRescue && surplusDiscountPercent > 0" class="flex items-center gap-1">
+                        <span class="text-xs line-through text-on-surface-variant font-bold">₹{{ originalUnitPrice }}</span>
+                        <span class="text-[9px] font-extrabold bg-green-100 text-green-800 px-1 rounded-sm">{{ surplusDiscountPercent }}% OFF</span>
+                      </div>
                       <span class="text-lg text-primary font-black leading-tight">₹{{ itemPrice }}</span>
                       <span class="block text-[10px] text-on-surface-variant font-medium leading-tight mt-0.5">per portion</span>
                     </div>
@@ -334,7 +360,10 @@ async function processPayment() {
                 <div class="flex items-center justify-between">
                   <div class="flex flex-col">
                     <span class="text-sm text-on-surface font-bold">Selected Portions</span>
-                    <span class="text-xs text-on-surface-variant font-medium">₹{{ itemPrice }} each</span>
+                    <span class="text-xs text-on-surface-variant font-medium">
+                      ₹{{ itemPrice }} each
+                      <span v-if="isSurplusRescue && surplusDiscountPercent > 0" class="text-green-700 font-bold ml-1">({{ surplusDiscountPercent }}% Rescue Discount)</span>
+                    </span>
                   </div>
                   <div class="flex items-center gap-1.5 px-3.5 py-2 bg-surface-container rounded-xl border border-outline-variant/20">
                     <span class="text-sm text-primary font-black">{{ quantity }}</span>
@@ -413,9 +442,31 @@ async function processPayment() {
                 </div>
                 <div class="flex flex-col gap-2 text-xs text-on-surface">
                   <div class="flex justify-between items-center">
-                    <span>{{ itemName }} (x{{ quantity }})</span>
-                    <span class="font-bold">₹{{ itemSubtotal }}</span>
+                    <div class="flex items-center gap-1.5">
+                      <span>{{ itemName }} (x{{ quantity }})</span>
+                      <span
+                        v-if="isSurplusRescue && surplusDiscountPercent > 0"
+                        class="px-1.5 py-0.5 rounded-sm bg-green-900/10 text-green-800 text-[10px] font-bold"
+                      >
+                        {{ surplusDiscountPercent }}% OFF
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span v-if="isSurplusRescue && surplusSavings > 0" class="line-through text-on-surface-variant text-[11px]">
+                        ₹{{ originalSubtotal }}
+                      </span>
+                      <span class="font-bold">₹{{ itemSubtotal }}</span>
+                    </div>
                   </div>
+
+                  <div v-if="isSurplusRescue && surplusSavings > 0" class="flex justify-between items-center text-green-700 font-semibold">
+                    <span class="flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[15px]">eco</span>
+                      <span>Surplus Rescue Discount</span>
+                    </span>
+                    <span>-₹{{ surplusSavings }}</span>
+                  </div>
+
                   <div v-if="fulfillment === 'delivery'" class="flex justify-between items-center text-on-surface-variant">
                     <span>Direct Delivery Fee ({{ distanceMeters >= 1000 ? (distanceMeters/1000).toFixed(1) + 'km' : distanceMeters + 'm' }})</span>
                     <span class="font-semibold text-on-surface">₹{{ deliveryFee }}</span>

@@ -34,6 +34,8 @@ const editForm = ref({
   image: '',
   customHours: '',
   customMinutes: '',
+  isSurplusRescue: false,
+  surplusDiscount: 30,
 })
 
 const hasCustomImage = computed(() => {
@@ -78,6 +80,8 @@ watch(
       image: dish.image || '',
       customHours: ch,
       customMinutes: cm,
+      isSurplusRescue: Boolean(dish.isSurplusRescue || dish.surplusStatus === 'SURPLUS'),
+      surplusDiscount: dish.surplusDiscount || 30,
     }
   },
   { immediate: true }
@@ -173,6 +177,9 @@ async function saveDish() {
       timeReady: finalStatus,
       readyAt: readyAt ? readyAt.toISOString() : null,
       image: editForm.value.image || DEFAULT_FOOD_SVG,
+      isSurplusRescue: Boolean(editForm.value.isSurplusRescue),
+      surplusDiscount: editForm.value.isSurplusRescue ? (Number(editForm.value.surplusDiscount) || 30) : 0,
+      surplusStatus: editForm.value.isSurplusRescue ? 'SURPLUS' : 'NORMAL',
       available: qty > 0,
       isAvailable: qty > 0,
     }
@@ -181,7 +188,7 @@ async function saveDish() {
     const updated = res?.food || res?.data || { ...payload, _id: editForm.value.id, id: editForm.value.id }
 
     emit('saved', updated)
-    emit('toast', `🎉 ${payload.name} updated successfully!`)
+    emit('toast', `${payload.name} updated successfully!`)
     handleClose()
   } catch (err) {
     console.error('Failed to update dish:', err)
@@ -455,6 +462,44 @@ async function saveDish() {
             <span class="material-symbols-outlined text-[18px]">directions_bike</span>
             <span class="text-[10px] font-bold leading-tight">Delivery Only</span>
           </button>
+        </div>
+      </div>
+
+      <!-- Surplus Food Rescue Listing Section -->
+      <div class="space-y-2 border border-outline-variant/30 rounded-sm p-3 bg-surface-container-lowest">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex flex-col">
+            <span class="text-xs font-bold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[15px] text-green-700">eco</span>
+              <span>Surplus Rescue Listing</span>
+            </span>
+            <span class="text-[11px] text-on-surface-variant font-medium mt-0.5">
+              Tag remaining portions with a community discount to mitigate food waste
+            </span>
+          </div>
+          <button
+            type="button"
+            @click="editForm.isSurplusRescue = !editForm.isSurplusRescue"
+            :class="editForm.isSurplusRescue ? 'bg-green-700 text-white' : 'bg-surface-container text-on-surface-variant border border-outline-variant/40'"
+            class="px-2.5 py-1 rounded-sm text-xs font-bold transition-colors cursor-pointer shrink-0"
+          >
+            {{ editForm.isSurplusRescue ? 'Active' : 'Off' }}
+          </button>
+        </div>
+
+        <!-- Discount % Input (shown when active) -->
+        <div v-if="editForm.isSurplusRescue" class="pt-2 border-t border-outline-variant/20 flex items-center justify-between gap-3">
+          <span class="text-xs font-medium text-on-surface">Community Discount:</span>
+          <div class="flex items-center gap-1.5">
+            <input
+              v-model.number="editForm.surplusDiscount"
+              type="number"
+              min="10"
+              max="80"
+              class="w-16 bg-surface text-center font-bold text-xs text-on-surface py-1 border border-outline-variant/40 rounded-sm focus:outline-none focus:border-primary"
+            />
+            <span class="text-xs font-bold text-on-surface-variant">% OFF</span>
+          </div>
         </div>
       </div>
 

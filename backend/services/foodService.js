@@ -98,6 +98,9 @@ export async function createFood(vendorUserId, data) {
     vendor: vendor._id,
     status: quantity > 0 ? 'AVAILABLE' : 'SOLD_OUT',
     available: quantity > 0,
+    isSurplusRescue: Boolean(data.isSurplusRescue),
+    surplusDiscount: data.isSurplusRescue ? (Number(data.surplusDiscount) || 30) : 0,
+    surplusStatus: data.isSurplusRescue ? 'SURPLUS' : (data.surplusStatus || 'NORMAL'),
   });
 
   await FoodAvailability.create({
@@ -118,6 +121,14 @@ export async function updateFood(foodId, data) {
   }
 
   const updatePayload = { ...data };
+
+  if (updatePayload.isSurplusRescue !== undefined) {
+    updatePayload.isSurplusRescue = Boolean(updatePayload.isSurplusRescue);
+    updatePayload.surplusStatus = updatePayload.isSurplusRescue ? 'SURPLUS' : 'NORMAL';
+    if (updatePayload.isSurplusRescue && !updatePayload.surplusDiscount) {
+      updatePayload.surplusDiscount = 30;
+    }
+  }
 
   if (updatePayload.quantity !== undefined) {
     const qty = Number(updatePayload.quantity);

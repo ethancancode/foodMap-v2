@@ -139,6 +139,13 @@ function onToggleSoldOut() {
         </span>
         <span>•</span>
         <span class="font-medium text-on-surface-variant">{{ item.category || 'Main Course' }}</span>
+        <span
+          v-if="item.isSurplusRescue || item.surplusStatus === 'SURPLUS'"
+          class="inline-flex items-center gap-1 font-bold px-1.5 py-0.5 rounded-sm bg-green-900/10 text-green-800 text-[10px]"
+        >
+          <span class="material-symbols-outlined text-[13px]">eco</span>
+          <span>Surplus ({{ item.surplusDiscount || 30 }}% off)</span>
+        </span>
       </div>
 
       <!-- Live Portion Quick Stepper -->

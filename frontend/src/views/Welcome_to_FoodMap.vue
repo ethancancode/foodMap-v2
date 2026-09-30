@@ -11,11 +11,21 @@ const authStore = useAuthStore()
 // State Management
 const currentStep = ref('roles') // 'roles' | 'phone' | 'otp' | 'vendor-onboarding' | 'success'
 const selectedRole = ref('resident') // 'resident' | 'vendor'
+const authMode = ref('signin') // 'signin' | 'register'
 const phoneNumber = ref('')
 const phoneError = ref('')
+const password = ref('')
+const passwordError = ref('')
+const showPassword = ref(false)
 const otpError = ref('')
 const onboardingError = ref('')
 const isSubmitting = ref(false)
+
+function setAuthMode(mode) {
+  authMode.value = mode
+  phoneError.value = ''
+  passwordError.value = ''
+}
 const OTP_LENGTH = 6
 const otpDigits = ref(Array(OTP_LENGTH).fill(''))
 const otpInputs = ref([])
@@ -201,6 +211,7 @@ const isOtpComplete = computed(() => {
 function selectRole(role) {
   selectedRole.value = role
   phoneError.value = ''
+  passwordError.value = ''
   currentStep.value = 'phone'
   emit('role-selected', role)
 }
@@ -208,6 +219,7 @@ function selectRole(role) {
 function goToRoles() {
   currentStep.value = 'roles'
   phoneError.value = ''
+  passwordError.value = ''
 }
 
 function sanitizePhone(e) {
@@ -228,17 +240,27 @@ function startResendCountdown() {
 }
 
 async function requestOtp() {
+  phoneError.value = ''
+  passwordError.value = ''
+
   if (phoneNumber.value.length !== 10) {
     phoneError.value = 'Please enter a valid 10-digit mobile number'
     return
   }
 
+  const passVal = password.value.trim()
+  if (!passVal || passVal.length < 3) {
+    passwordError.value = 'Password must be at least 3 characters'
+    return
+  }
+
   isSubmitting.value = true
-  phoneError.value = ''
   try {
     await authStore.requestOtp({
       phone: formattedPhone(),
+      password: passVal,
       role: selectedRole.value,
+      isRegister: authMode.value === 'register',
     })
     currentStep.value = 'otp'
     otpError.value = ''
@@ -249,7 +271,12 @@ async function requestOtp() {
       otpInputs.value[0].focus()
     }
   } catch (err) {
-    phoneError.value = err.message || 'Could not initiate authentication. Please try again.'
+    const errMsg = err.message || ''
+    if (errMsg.toLowerCase().includes('password')) {
+      passwordError.value = errMsg
+    } else {
+      phoneError.value = errMsg || 'Could not initiate authentication. Please try again.'
+    }
   } finally {
     isSubmitting.value = false
   }
@@ -347,6 +374,7 @@ async function verifyOtp() {
     const res = await authStore.verifyOtp({
       phone: formattedPhone(),
       otp: otpDigits.value.join(''),
+      password: password.value.trim(),
       role: selectedRole.value,
     })
 
@@ -644,10 +672,10 @@ onBeforeUnmount(() => {
                     <span>Back</span>
                   </div>
                   <h2 class="title-main">
-                    {{ selectedRole === 'resident' ? 'Resident Login' : 'Vendor Sign In' }}
+                    {{ authMode === 'register' ? (selectedRole === 'resident' ? 'Create Resident Account' : 'Register New Kitchen') : (selectedRole === 'resident' ? 'Resident Sign In' : 'Kitchen Sign In') }}
                   </h2>
                   <p class="subtitle-main">
-                    Enter your mobile number to receive an instant verification code.
+                    {{ authMode === 'register' ? 'Enter your mobile number and set a password (min 3 characters).' : 'Enter your mobile number and password to sign in.' }}
                   </p>
                 </div>
                 <div v-else-if="currentStep === 'otp'" key="header-otp" class="heading-group">
@@ -663,7 +691,7 @@ onBeforeUnmount(() => {
                   </p>
                 </div>
                 <div v-else-if="currentStep === 'vendor-onboarding'" key="header-onboarding" class="heading-group">
-                  <h2 class="title-main">Set Up Kitchen Profile 👨‍🍳</h2>
+                  <h2 class="title-main">Set Up Kitchen Profile</h2>
                   <p class="subtitle-main">
                     Welcome to FoodMap! Tell your neighborhood about your home kitchen and specialties.
                   </p>
@@ -673,7 +701,7 @@ onBeforeUnmount(() => {
                     <span class="material-symbols-outlined icon-back">arrow_back</span>
                     <span>Back to Details</span>
                   </div>
-                  <h2 class="title-main">Story & Experience 📖</h2>
+                  <h2 class="title-main">Story & Experience</h2>
                   <p class="subtitle-main">
                     Tell your neighborhood what makes your cooking special (optional, can skip for now).
                   </p>
@@ -683,13 +711,13 @@ onBeforeUnmount(() => {
                     <span class="material-symbols-outlined icon-back">arrow_back</span>
                     <span>Back to Story</span>
                   </div>
-                  <h2 class="title-main">Kitchen Photos 📸</h2>
+                  <h2 class="title-main">Kitchen Photos</h2>
                   <p class="subtitle-main">
                     Add a profile picture and cover banner for your kitchen (optional, can skip for now).
                   </p>
                 </div>
                 <div v-else-if="currentStep === 'resident-onboarding'" key="header-resident-onboarding" class="heading-group">
-                  <h2 class="title-main">Set Up Resident Profile 👤</h2>
+                  <h2 class="title-main">Set Up Resident Profile</h2>
                   <p class="subtitle-main">
                     Tell us your details to personalize your FoodMap experience.
                   </p>
@@ -759,7 +787,7 @@ onBeforeUnmount(() => {
                 </button>
               </div>
 
-              <!-- STEP 2: Phone Input (Clean & Simple) -->
+              <!-- STEP 2: Phone & Password Input (Clean & Simple) -->
               <form
                 v-else-if="currentStep === 'phone'"
                 key="step-phone"
@@ -767,6 +795,26 @@ onBeforeUnmount(() => {
                 novalidate
                 @submit.prevent="requestOtp"
               >
+                <!-- Mode Switch Tabs: Sign In vs Create Account -->
+                <div class="auth-tabs-row">
+                  <button
+                    type="button"
+                    class="auth-tab-btn"
+                    :class="{ active: authMode === 'signin' }"
+                    @click="setAuthMode('signin')"
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    class="auth-tab-btn"
+                    :class="{ active: authMode === 'register' }"
+                    @click="setAuthMode('register')"
+                  >
+                    Create Account
+                  </button>
+                </div>
+
                 <div class="input-group">
                   <label for="mobile" class="input-label">Mobile Number</label>
                   <div class="phone-input-field" :class="{ 'has-error': phoneError }">
@@ -791,17 +839,64 @@ onBeforeUnmount(() => {
                   <span v-if="phoneError" class="error-msg">{{ phoneError }}</span>
                 </div>
 
+                <div class="input-group">
+                  <div class="field-label-row">
+                    <label for="password" class="input-label">Password</label>
+                    <span class="field-hint-text">Min. 3 characters</span>
+                  </div>
+                  <div class="password-input-field" :class="{ 'has-error': passwordError }">
+                    <span class="material-symbols-outlined password-icon">lock</span>
+                    <input
+                      id="password"
+                      v-model="password"
+                      :type="showPassword ? 'text' : 'password'"
+                      :placeholder="authMode === 'register' ? 'Choose a password (min 3 chars)' : 'Enter your password'"
+                      class="password-input"
+                      @input="passwordError = ''"
+                    />
+                    <button
+                      type="button"
+                      class="toggle-password-btn"
+                      @click="showPassword = !showPassword"
+                      :title="showPassword ? 'Hide password' : 'Show password'"
+                    >
+                      <span class="material-symbols-outlined">
+                        {{ showPassword ? 'visibility_off' : 'visibility' }}
+                      </span>
+                    </button>
+                  </div>
+                  <span v-if="passwordError" class="error-msg">{{ passwordError }}</span>
+                </div>
+
                 <button
                   type="submit"
                   class="submit-btn"
-                  :disabled="phoneNumber.length !== 10 || isSubmitting"
+                  :disabled="phoneNumber.length !== 10 || password.trim().length < 3 || isSubmitting"
                 >
-                  <span v-if="!isSubmitting">Send Verification Code</span>
+                  <span v-if="!isSubmitting">
+                    {{ authMode === 'register' ? 'Create Account & Continue' : 'Sign In & Continue' }}
+                  </span>
                   <span v-else class="loading-state">
                     <span class="spinner"></span>
-                    Sending...
+                    Please wait...
                   </span>
                 </button>
+
+                <!-- Switch Mode Link -->
+                <div class="auth-switch-link-row">
+                  <span v-if="authMode === 'signin'">
+                    New to FoodMap?
+                    <button type="button" class="inline-switch-btn" @click="setAuthMode('register')">
+                      Create an account
+                    </button>
+                  </span>
+                  <span v-else>
+                    Already have an account?
+                    <button type="button" class="inline-switch-btn" @click="setAuthMode('signin')">
+                      Sign in here
+                    </button>
+                  </span>
+                </div>
               </form>
 
               <!-- STEP 3: OTP / TOTP Input -->
@@ -1431,14 +1526,6 @@ onBeforeUnmount(() => {
               </div>
             </Transition>
 
-            <!-- Footer / Terms & Privacy Notice -->
-            <div class="footer-terms">
-              <p class="terms-text">
-                By continuing, you agree to our
-                <a href="#terms" class="terms-link">Terms of Service</a> and
-                <a href="#privacy" class="terms-link">Privacy Policy</a>.
-              </p>
-            </div>
           </div>
         </div>
       </div>
@@ -2143,6 +2230,110 @@ onBeforeUnmount(() => {
 .phone-input-field.has-error {
   border-color: #ba1a1a;
   background: #fff8f7;
+}
+
+.auth-tabs-row {
+  display: flex;
+  background: var(--color-surface-container-low, #f1f5f9);
+  border: 1px solid var(--color-outline-variant, #cbd5e1);
+  border-radius: 0.75rem;
+  padding: 3px;
+  gap: 4px;
+}
+
+.auth-tab-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.6rem;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-on-surface-variant, #64748b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.auth-tab-btn.active {
+  background: #ffffff;
+  color: var(--color-primary, #1e40af);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.password-input-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--color-surface-container-low);
+  border: 1.5px solid var(--color-surface-container-highest);
+  border-radius: 0.875rem;
+  padding: 0.65rem 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.password-input-field:focus-within {
+  border-color: var(--color-primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(169, 54, 32, 0.12);
+  transform: scale(1.01);
+}
+
+.password-input-field.has-error {
+  border-color: #ba1a1a;
+  background: #fff8f7;
+}
+
+.password-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--color-on-surface);
+}
+
+.password-icon {
+  font-size: 20px;
+  color: var(--color-on-surface-variant);
+}
+
+.toggle-password-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  color: var(--color-on-surface-variant);
+  transition: color 0.15s ease;
+}
+
+.toggle-password-btn:hover {
+  color: var(--color-primary);
+}
+
+.auth-switch-link-row {
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--color-on-surface-variant);
+  margin-top: 0.25rem;
+}
+
+.inline-switch-btn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0 0.25rem;
+}
+
+.inline-switch-btn:hover {
+  opacity: 0.8;
 }
 
 .vendor-setup-section {

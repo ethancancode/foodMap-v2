@@ -55,6 +55,18 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 5,
     },
+    discountAmount: {
+      type: Number,
+      default: 0,
+    },
+    isSurplusRescue: {
+      type: Boolean,
+      default: false,
+    },
+    surplusDiscount: {
+      type: Number,
+      default: 0,
+    },
     totalAmount: {
       type: Number,
       required: true,

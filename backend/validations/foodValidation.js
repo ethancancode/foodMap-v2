@@ -16,6 +16,9 @@ export const createFoodSchema = z.object({
   fulfillmentOptions: z.string().optional().default('BOTH'),
   vendorName: z.string().optional(),
   vendorLocation: z.any().optional(),
+  isSurplusRescue: z.boolean().optional(),
+  surplusDiscount: z.coerce.number().min(0).max(90).optional(),
+  surplusStatus: z.string().optional(),
 }).passthrough();
 
 export const updateFoodSchema = z.object({
@@ -31,4 +34,7 @@ export const updateFoodSchema = z.object({
   image: z.string().optional(),
   timeReady: z.string().optional(),
   cookingStatus: z.string().optional(),
+  isSurplusRescue: z.boolean().optional(),
+  surplusDiscount: z.coerce.number().min(0).max(90).optional(),
+  surplusStatus: z.string().optional(),
 }).passthrough();

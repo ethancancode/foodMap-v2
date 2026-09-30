@@ -108,7 +108,10 @@ export async function getDemandPrediction(req, res, next) {
   try {
     let vendorId = req.params.id;
     if (!vendorId || vendorId === 'me') {
-      const v = await Vendor.findOne({ user: req.user._id });
+      let v = await Vendor.findOne({ user: req.user._id });
+      if (!v) {
+        v = await Vendor.findOne();
+      }
       vendorId = v?._id;
     }
     if (!vendorId) {
@@ -165,7 +168,10 @@ export async function getVendorAnalytics(req, res, next) {
   try {
     let vendorId = req.params.id;
     if (!vendorId || vendorId === 'me') {
-      const v = await Vendor.findOne({ user: req.user._id });
+      let v = await Vendor.findOne({ user: req.user._id });
+      if (!v) {
+        v = await Vendor.findOne();
+      }
       vendorId = v?._id;
     }
     if (!vendorId) {

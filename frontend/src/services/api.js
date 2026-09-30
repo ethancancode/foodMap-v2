@@ -106,6 +106,7 @@ export const sustainabilityApi = {
 };
 
 export const authApi = {
+  login: (payload) => api.post('/auth/login', payload).then((r) => r.data),
   requestOtp: (payload) => {
     const body = typeof payload === 'string' ? { phone: payload } : payload;
     return api.post('/auth/request-otp', body).then((r) => r.data);

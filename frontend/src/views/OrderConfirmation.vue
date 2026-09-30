@@ -158,6 +158,13 @@ function navigateTo(route, payload = null) {
               <span class="text-on-surface-variant">Portions</span>
               <span class="font-bold text-on-surface bg-surface-container px-3 py-1 rounded-full">x {{ orderData.qty }}</span>
             </div>
+            <div v-if="orderData.discountAmount > 0" class="flex justify-between items-center w-full text-xs text-green-700 font-semibold mt-2 pt-2 border-t border-outline-variant/10">
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">eco</span>
+                <span>Surplus Rescue Savings</span>
+              </span>
+              <span>-₹{{ orderData.discountAmount }}</span>
+            </div>
           </div>
 
           <!-- Actions -->

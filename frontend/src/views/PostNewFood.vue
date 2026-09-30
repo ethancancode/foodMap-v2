@@ -29,6 +29,8 @@ const isVeg = ref(true)
 const fulfillmentOptions = ref('BOTH') // 'BOTH' | 'PICKUP_ONLY' | 'DELIVERY_ONLY'
 const itemDesc = ref('')
 const itemImage = ref('')
+const isSurplusRescue = ref(false)
+const surplusDiscount = ref(30)
 const isPosting = ref(false)
 const foodFileInput = ref(null)
 const isMapModalOpen = ref(false)
@@ -49,6 +51,8 @@ function loadDraft() {
     if (draft.fulfillmentOptions !== undefined) fulfillmentOptions.value = draft.fulfillmentOptions
     if (draft.itemDesc !== undefined) itemDesc.value = draft.itemDesc
     if (draft.itemImage !== undefined) itemImage.value = draft.itemImage
+    if (draft.isSurplusRescue !== undefined) isSurplusRescue.value = draft.isSurplusRescue
+    if (draft.surplusDiscount !== undefined) surplusDiscount.value = draft.surplusDiscount
   } catch (e) {
     console.warn('Failed to restore post food draft', e)
   }
@@ -67,7 +71,9 @@ function saveDraft() {
       isVeg: isVeg.value,
       fulfillmentOptions: fulfillmentOptions.value,
       itemDesc: itemDesc.value,
-      itemImage: itemImage.value
+      itemImage: itemImage.value,
+      isSurplusRescue: isSurplusRescue.value,
+      surplusDiscount: surplusDiscount.value,
     }
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
   } catch (e) {
@@ -83,7 +89,7 @@ function clearDraft() {
 
 // Watch all form fields and persist
 watch(
-  [itemName, itemPrice, itemQty, readyTime, customHours, customMinutes, itemCategory, isVeg, fulfillmentOptions, itemDesc, itemImage],
+  [itemName, itemPrice, itemQty, readyTime, customHours, customMinutes, itemCategory, isVeg, fulfillmentOptions, itemDesc, itemImage, isSurplusRescue, surplusDiscount],
   () => {
     saveDraft()
   },
@@ -304,6 +310,9 @@ async function handlePost() {
       category: itemCategory.value,
       image: itemImage.value || DEFAULT_FOOD_SVG,
       vendorName: vendorProfile.value?.businessName || props.user?.name || "My Kitchen",
+      isSurplusRescue: Boolean(isSurplusRescue.value),
+      surplusDiscount: isSurplusRescue.value ? (Number(surplusDiscount.value) || 30) : 0,
+      surplusStatus: isSurplusRescue.value ? 'SURPLUS' : 'NORMAL',
       vendorLocation: {
         type: 'Point',
         coordinates: coords,
@@ -321,7 +330,7 @@ async function handlePost() {
       createdFood.isAvailable = true
       emit('action', {
         action: 'toast',
-        payload: { message: `🎉 ${createdFood.name} is now live on the neighborhood radar!` }
+        payload: { message: `${createdFood.name} is now live on the neighborhood radar!` }
       })
       emit('navigate', 'you_are_live', {
         food: {
@@ -691,6 +700,44 @@ async function handlePost() {
                   <span class="material-symbols-outlined text-[20px]">directions_bike</span>
                   <span class="font-bold text-[11px] leading-tight">Delivery Only</span>
                 </button>
+              </div>
+            </div>
+
+            <!-- Surplus Food Rescue Listing Section -->
+            <div class="space-y-2 border border-outline-variant/30 rounded-sm p-3.5 bg-surface-container-lowest">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[16px] text-green-700">eco</span>
+                    <span>Surplus Rescue Listing</span>
+                  </span>
+                  <span class="text-[11px] text-on-surface-variant font-medium mt-0.5">
+                    Mark remaining batch portions with a community discount to mitigate food waste
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  @click="isSurplusRescue = !isSurplusRescue"
+                  :class="isSurplusRescue ? 'bg-green-700 text-white' : 'bg-surface-container text-on-surface-variant border border-outline-variant/40'"
+                  class="px-3 py-1.5 rounded-sm text-xs font-bold transition-colors cursor-pointer shrink-0"
+                >
+                  {{ isSurplusRescue ? 'Active' : 'Off' }}
+                </button>
+              </div>
+
+              <!-- Discount % Input (shown when active) -->
+              <div v-if="isSurplusRescue" class="pt-2 border-t border-outline-variant/20 flex items-center justify-between gap-3">
+                <span class="text-xs font-medium text-on-surface">Community Discount:</span>
+                <div class="flex items-center gap-1.5">
+                  <input
+                    v-model.number="surplusDiscount"
+                    type="number"
+                    min="10"
+                    max="80"
+                    class="w-16 bg-surface text-center font-bold text-xs text-on-surface py-1 border border-outline-variant/40 rounded-sm focus:outline-none focus:border-primary"
+                  />
+                  <span class="text-xs font-bold text-on-surface-variant">% OFF</span>
+                </div>
               </div>
             </div>
 

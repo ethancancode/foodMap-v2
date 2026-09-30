@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 import { generateSecret } from 'otplib';
 import { connectDB } from '../config/database.js';
 import User from '../models/User.js';
@@ -40,12 +41,14 @@ async function seed() {
   ]);
 
   console.log('[Seed] Creating demo accounts...');
+  const defaultPassword = await bcrypt.hash('123456', 10);
 
   // 1. Admin
   const admin = await User.create({
     phone: '9999999999',
     name: 'FoodMap Admin',
     role: 'admin',
+    password: defaultPassword,
     totpSecret: generateSecret(),
     isTotpSetup: true,
     isVerified: true,
@@ -62,6 +65,7 @@ async function seed() {
     phone: '8888888888',
     name: 'Raju Delivery Express',
     role: 'delivery_partner',
+    password: defaultPassword,
     totpSecret: generateSecret(),
     isTotpSetup: true,
     isVerified: true,
@@ -78,6 +82,7 @@ async function seed() {
     phone: '9876543210',
     name: 'Chef Ananya Sharma',
     role: 'vendor',
+    password: defaultPassword,
     totpSecret: generateSecret(),
     isTotpSetup: true,
     isVerified: true,
@@ -113,6 +118,7 @@ async function seed() {
     phone: '9876543222',
     name: 'Chef Vikram Patil',
     role: 'vendor',
+    password: defaultPassword,
     totpSecret: generateSecret(),
     isTotpSetup: true,
     isVerified: true,
@@ -147,6 +153,7 @@ async function seed() {
     phone: '9820123456',
     name: 'Priya Mehta',
     role: 'resident',
+    password: defaultPassword,
     totpSecret: generateSecret(),
     gender: 'female',
     occupation: 'working',
