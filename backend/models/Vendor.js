@@ -42,6 +42,19 @@ const vendorSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    verificationStatus: {
+      type: String,
+      enum: ['NOT_VERIFIED', 'PENDING', 'VERIFIED', 'REJECTED'],
+      default: 'VERIFIED',
+    },
+    followersCount: {
+      type: Number,
+      default: 0,
+    },
+    subscriberCount: {
+      type: Number,
+      default: 0,
+    },
     coverImage: {
       type: String,
       default: '',

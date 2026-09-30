@@ -34,7 +34,9 @@ const props = defineProps({
 const emit = defineEmits(['close', 'navigate', 'logout', 'sign-in'])
 
 const orderStore = useOrderStore()
-const isVendor = computed(() => props.role === 'vendor' || props.user?.role === 'vendor')
+const isAdmin = computed(() => props.role === 'admin' || props.user?.role === 'admin')
+const isDelivery = computed(() => props.role === 'delivery_partner' || props.role === 'courier' || props.user?.role === 'delivery_partner' || props.user?.role === 'courier')
+const isVendor = computed(() => !isAdmin.value && !isDelivery.value && (props.role === 'vendor' || props.user?.role === 'vendor'))
 const isGuest = computed(() => !props.user || props.role === 'guest')
 
 const internalPendingCount = ref(0)
@@ -100,6 +102,40 @@ const effectivePendingOrdersCount = computed(() => {
 
 // Sidebar Navigation Items
 const navItems = computed(() => {
+  if (isAdmin.value) {
+    return [
+      {
+        id: 'admin_dashboard',
+        label: 'Admin Console',
+        icon: 'admin_panel_settings',
+        route: 'admin_dashboard',
+      },
+      {
+        id: 'food_radar',
+        label: 'Food Radar',
+        icon: 'explore',
+        route: 'food_radar',
+      },
+    ]
+  }
+
+  if (isDelivery.value) {
+    return [
+      {
+        id: 'delivery_dashboard',
+        label: 'Deliveries Hub',
+        icon: 'two_wheeler',
+        route: 'delivery_dashboard',
+      },
+      {
+        id: 'food_radar',
+        label: 'Food Radar',
+        icon: 'explore',
+        route: 'food_radar',
+      },
+    ]
+  }
+
   if (isVendor.value) {
     return [
       {
@@ -176,11 +212,15 @@ const vendorDisplayName = computed(() => {
 })
 
 const residentDisplayName = computed(() => {
+  if (isAdmin.value) return props.user?.name || 'Administrator'
+  if (isDelivery.value) return props.user?.name || 'Delivery Partner'
   if (isGuest.value) return 'Guest Explorer'
   return props.user?.name || 'Resident'
 })
 
 const residentLocationName = computed(() => {
+  if (isAdmin.value) return 'System Moderation'
+  if (isDelivery.value) return 'Active Courier Zone'
   if (isGuest.value) return 'Tap to Sign In'
   return (
     props.user?.location?.address ||
@@ -195,7 +235,7 @@ function handleNavigate(route) {
 }
 
 function handleBrandClick() {
-  const homeRoute = isVendor.value ? 'vendor_dashboard' : 'food_radar'
+  const homeRoute = isAdmin.value ? 'admin_dashboard' : (isDelivery.value ? 'delivery_dashboard' : (isVendor.value ? 'vendor_dashboard' : 'food_radar'))
   handleNavigate(homeRoute)
 }
 

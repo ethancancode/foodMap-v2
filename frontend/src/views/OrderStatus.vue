@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { orderApi } from '../services/api.js'
-import { onOrderStatusChanged } from '../services/socket.js'
+import { onOrderStatusChanged, onDeliveryLocationUpdated, onDeliveryAssigned } from '../services/socket.js'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
 
@@ -255,11 +255,73 @@ onMounted(async () => {
       }
     }
   })
+
+  // Delivery Partner Realtime Socket Listeners
+  unsubDeliveryAssigned = onDeliveryAssigned((data) => {
+    const currentId = liveOrder.value?._id || liveOrder.value?.id
+    if (data.orderId === currentId) {
+      if (!liveOrder.value.deliveryPartner) {
+        liveOrder.value.deliveryPartner = data.deliveryPartner
+      }
+      liveOrder.value.deliveryStatus = data.deliveryStatus || 'ASSIGNED'
+      emit('action', {
+        action: 'toast',
+        payload: { message: `Courier ${data.deliveryPartner?.name || 'Rider'} assigned to your delivery!` }
+      })
+    }
+  })
+
+  unsubDeliveryLocation = onDeliveryLocationUpdated((data) => {
+    const currentId = liveOrder.value?._id || liveOrder.value?.id
+    if (data.orderId === currentId) {
+      if (data.deliveryStatus) {
+        liveOrder.value.deliveryStatus = data.deliveryStatus
+      }
+      if (data.location?.coordinates) {
+        const [lng, lat] = data.location.coordinates
+        liveOrder.value.deliveryPartnerLocation = { coordinates: [lng, lat] }
+        updateCourierMapMarker(lat, lng)
+      }
+    }
+  })
 })
 
+let unsubDeliveryAssigned
+let unsubDeliveryLocation
+let courierMarker = null
+
+function updateCourierMapMarker(lat, lng) {
+  if (!mapInstance) return
+  if (!courierMarker) {
+    const courierIcon = L.divIcon({
+      className: 'custom-courier-pin',
+      html: `
+        <div style="background:#0284c7;color:#fff;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(2,132,199,0.5);border:2px solid #fff;">
+          <span style="font-family:'Material Symbols Outlined';font-size:18px;">two_wheeler</span>
+        </div>
+      `,
+      iconSize: [34, 34],
+      iconAnchor: [17, 34]
+    })
+    courierMarker = L.marker([lat, lng], { icon: courierIcon })
+      .addTo(mapInstance)
+      .bindPopup(`<b>Courier En Route</b><br/>Live GPS Signal`)
+  } else {
+    courierMarker.setLatLng([lat, lng])
+  }
+
+  // Pan to show courier and kitchen
+  try {
+    const { lat: kLat, lng: kLng } = kitchenCoords.value
+    const bounds = L.latLngBounds([[kLat, kLng], [lat, lng]])
+    mapInstance.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 })
+  } catch (e) {}
+}
 
 onUnmounted(() => {
   if (unsubOrderStatus) unsubOrderStatus()
+  if (unsubDeliveryAssigned) unsubDeliveryAssigned()
+  if (unsubDeliveryLocation) unsubDeliveryLocation()
   if (mapInstance) {
     mapInstance.remove()
     mapInstance = null
@@ -533,9 +595,44 @@ async function copyVendorPhone() {
             </div>
           </div>
 
-          <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-            <div class="bg-surface-container-lowest rounded-3xl p-4 sm:p-5 flex flex-col gap-3 shadow-sm border border-outline-variant/20">
-              <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Kitchen Pickup Point</span>
+          <div v-else class="flex flex-col gap-3 sm:gap-4">
+            <!-- Dedicated Courier Card if Delivery Order -->
+            <div v-if="isDeliveryOrder" class="bg-surface-container-lowest rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm border border-outline-variant/20">
+              <div class="flex items-center gap-3.5">
+                <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-[24px]">two_wheeler</span>
+                </div>
+                <div class="flex flex-col">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-on-surface">
+                      {{ liveOrder.deliveryPartner ? (liveOrder.deliveryPartner.name || 'Neighborhood Courier') : 'Searching for Courier' }}
+                    </span>
+                    <span
+                      class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                      :class="liveOrder.deliveryPartner ? 'bg-primary/10 text-primary' : 'bg-amber-500/15 text-amber-700'"
+                    >
+                      {{ liveOrder.deliveryStatus || (liveOrder.deliveryPartner ? 'ASSIGNED' : 'AWAITING COURIER') }}
+                    </span>
+                  </div>
+                  <span class="text-xs text-on-surface-variant mt-0.5">
+                    {{ liveOrder.deliveryPartner ? 'Live GPS throttled broadcast active' : 'A nearby verified delivery rider will claim this order soon.' }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="liveOrder.deliveryPartner?.phone" class="flex items-center gap-2 self-start sm:self-auto">
+                <a
+                  :href="'tel:' + liveOrder.deliveryPartner.phone"
+                  class="px-3.5 py-2 bg-surface-container hover:bg-surface-container-high rounded-xl text-xs font-bold text-on-surface flex items-center gap-1.5 transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[16px] text-primary">call</span>
+                  <span>{{ liveOrder.deliveryPartner.phone }}</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+              <div class="bg-surface-container-lowest rounded-3xl p-4 sm:p-5 flex flex-col gap-3 shadow-sm border border-outline-variant/20">
+                <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Kitchen Pickup Point</span>
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
                   <span class="material-symbols-outlined text-[20px]">soup_kitchen</span>
@@ -584,6 +681,7 @@ async function copyVendorPhone() {
               </div>
             </div>
           </div>
+        </div>
 
 
         </div>

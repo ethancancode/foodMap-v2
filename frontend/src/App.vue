@@ -25,6 +25,8 @@ import NewOrder from './views/NewOrder.vue'
 import VendorOrderConfirmed from './views/VendorOrderConfirmed.vue'
 import VendorProfile from './views/VendorProfile.vue'
 import EditVendorProfile from './views/EditVendorProfile.vue'
+import AdminDashboard from './views/AdminDashboard.vue'
+import DeliveryPartnerDashboard from './views/DeliveryPartnerDashboard.vue'
 
 import { useRouter, useRoute } from 'vue-router'
 
@@ -56,6 +58,8 @@ const screenToPath = {
   vendor_order_confirmed: '/vendor-order-confirmed',
   vendor_profile: '/vendor-profile',
   edit_vendor_profile: '/edit-vendor-profile',
+  admin_dashboard: '/admin',
+  delivery_dashboard: '/delivery',
 }
 
 const pathToScreen = Object.fromEntries(
@@ -83,12 +87,20 @@ const screenComponents = {
   vendor_order_confirmed: VendorOrderConfirmed,
   vendor_profile: VendorProfile,
   edit_vendor_profile: EditVendorProfile,
+  admin_dashboard: AdminDashboard,
+  delivery_dashboard: DeliveryPartnerDashboard,
 }
 
 // Drive active screen directly from current URL path
 const currentScreenId = computed(() => {
   if (pathToScreen[route.path]) {
     return pathToScreen[route.path]
+  }
+  if (route.path.startsWith('/admin')) {
+    return 'admin_dashboard'
+  }
+  if (route.path.startsWith('/delivery')) {
+    return 'delivery_dashboard'
   }
   if (route.path.startsWith('/order-confirmation')) {
     return 'order_confirmation'
@@ -254,8 +266,15 @@ function goBack() {
 function handleAuthSuccess(authData) {
   const userId = authStore.user?._id || authStore.user?.id
   const vendorId = authStore.user?.vendor?._id || authStore.user?.vendor?.id || authStore.user?.vendor || userId
+  const effectiveRole = authData?.role || authStore.user?.role || authStore.currentRole
 
-  if (authStore.currentRole === 'vendor' || authStore.user?.role === 'vendor' || authData?.role === 'vendor') {
+  if (effectiveRole === 'admin') {
+    router.push('/admin')
+    showToast(`Welcome! Logged in as System Administrator.`)
+  } else if (effectiveRole === 'delivery_partner' || effectiveRole === 'courier') {
+    router.push('/delivery')
+    showToast(`Welcome! Logged in as Delivery Courier (${authStore.user?.name || 'Rider'}).`)
+  } else if (effectiveRole === 'vendor') {
     if (vendorId) {
       router.push(`/vendor-dashboard/${encodeURIComponent(vendorId)}`)
     } else {
@@ -397,7 +416,11 @@ onMounted(async () => {
     if (route.path === '/' && authStore.isAuthenticated && authStore.user) {
       const userId = authStore.user._id || authStore.user.id
       const vendorId = authStore.user.vendor?._id || authStore.user.vendor?.id || authStore.user.vendor || userId
-      if (authStore.user.role === 'vendor') {
+      if (authStore.user.role === 'admin') {
+        router.push('/admin')
+      } else if (authStore.user.role === 'delivery_partner' || authStore.user.role === 'courier') {
+        router.push('/delivery')
+      } else if (authStore.user.role === 'vendor') {
         router.push(vendorId ? `/vendor-dashboard/${encodeURIComponent(vendorId)}` : '/vendor-dashboard')
       } else {
         router.push(userId ? `/radar?resident=${encodeURIComponent(userId)}` : '/radar')

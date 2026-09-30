@@ -120,3 +120,100 @@ export async function getOrderById(req, res, next) {
     next(err);
   }
 }
+
+export async function getAvailableDeliveries(req, res, next) {
+  try {
+    const deliveries = await orderService.getAvailableDeliveries();
+    res.json({ success: true, count: deliveries.length, data: deliveries, orders: deliveries });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getMyDeliveries(req, res, next) {
+  try {
+    const deliveries = await orderService.getMyDeliveries(req.user._id);
+    res.json({ success: true, count: deliveries.length, data: deliveries, orders: deliveries });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function acceptDelivery(req, res, next) {
+  try {
+    const order = await orderService.acceptDeliveryAssignment(req.params.id, req.user);
+
+    if (req.io) {
+      const payload = {
+        orderId: order._id,
+        order,
+        deliveryPartner: {
+          id: req.user._id,
+          name: req.user.name,
+          phone: req.user.phone,
+        },
+      };
+      req.io.to(`order:${order._id}`).emit('delivery:assigned', payload);
+      req.io.to(`order:${order._id}`).emit('order:statusUpdated', order);
+      if (order.resident?._id || order.resident) {
+        req.io.to(`user:${order.resident._id || order.resident}`).emit('delivery:assigned', payload);
+        req.io.to(`user:${order.resident._id || order.resident}`).emit('order:statusUpdated', order);
+      }
+      req.io.emit('delivery:assigned', payload);
+    }
+
+    res.json({ success: true, message: 'Delivery assignment accepted', data: order, order });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateDeliveryStatus(req, res, next) {
+  try {
+    const { status } = req.body;
+    const order = await orderService.updateDeliveryStatus(req.params.id, status, req.user._id);
+
+    if (req.io) {
+      req.io.to(`order:${order._id}`).emit('order:statusUpdated', order);
+      req.io.to(`order:${order._id}`).emit('delivery:statusUpdated', { orderId: order._id, status, order });
+      if (order.resident?._id || order.resident) {
+        req.io.to(`user:${order.resident._id || order.resident}`).emit('order:statusUpdated', order);
+        req.io.to(`user:${order.resident._id || order.resident}`).emit('delivery:statusUpdated', { orderId: order._id, status, order });
+      }
+      req.io.emit('order:statusUpdated', order);
+    }
+
+    res.json({ success: true, message: `Delivery status updated to ${status}`, data: order, order });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateDeliveryLocation(req, res, next) {
+  try {
+    const { coordinates, address } = req.body;
+    if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+      return res.status(400).json({ success: false, message: 'Valid [lng, lat] coordinates required' });
+    }
+
+    const order = await orderService.updateDeliveryLocation(req.params.id, coordinates, address);
+
+    if (req.io) {
+      const locPayload = {
+        orderId: order._id,
+        coordinates,
+        address: address || '',
+        updatedAt: new Date().toISOString(),
+      };
+      req.io.to(`order:${order._id}`).emit('delivery:locationUpdated', locPayload);
+      if (order.resident?._id || order.resident) {
+        req.io.to(`user:${order.resident._id || order.resident}`).emit('delivery:locationUpdated', locPayload);
+      }
+    }
+
+    res.json({ success: true, message: 'Delivery location updated', location: order.deliveryPartnerLocation });
+  } catch (err) {
+    next(err);
+  }
+}
+

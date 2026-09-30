@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const requestOtpSchema = z.object({
   phone: z.string().min(8, 'Phone number must be at least 8 characters'),
-  role: z.enum(['resident', 'vendor']).optional().default('resident'),
+  role: z.enum(['resident', 'vendor', 'delivery_partner', 'admin']).optional().default('resident'),
   name: z.string().optional(),
   businessName: z.string().optional(),
   specialties: z.string().optional(),
@@ -14,7 +14,7 @@ export const requestOtpSchema = z.object({
 export const verifyOtpSchema = z.object({
   phone: z.string().min(8, 'Phone number is required'),
   otp: z.string().min(6, 'Verification code must be 6 digits').max(6, 'Verification code must be 6 digits'),
-  role: z.enum(['resident', 'vendor']).optional(),
+  role: z.enum(['resident', 'vendor', 'delivery_partner', 'admin']).optional(),
   name: z.string().optional(),
   businessName: z.string().optional(),
   specialties: z.string().optional(),
@@ -24,7 +24,7 @@ export const verifyOtpSchema = z.object({
 }).passthrough();
 
 export const completeOnboardingSchema = z.object({
-  role: z.enum(['resident', 'vendor']).optional(),
+  role: z.enum(['resident', 'vendor', 'delivery_partner', 'admin']).optional(),
   name: z.string().optional(),
   residentName: z.string().optional(),
   gender: z.string().optional(),

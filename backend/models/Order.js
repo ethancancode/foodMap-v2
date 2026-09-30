@@ -104,6 +104,58 @@ const orderSchema = new mongoose.Schema(
     specialInstructions: {
       type: String,
     },
+    deliveryPartner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    deliveryPartnerName: {
+      type: String,
+      default: '',
+    },
+    deliveryPartnerPhone: {
+      type: String,
+      default: '',
+    },
+    deliveryPartnerLocation: {
+      coordinates: {
+        type: [Number], // [lng, lat]
+      },
+      address: {
+        type: String,
+        default: '',
+      },
+      updatedAt: {
+        type: Date,
+      },
+    },
+    deliveryStatus: {
+      type: String,
+      enum: ['UNASSIGNED', 'ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'],
+      default: 'UNASSIGNED',
+    },
+    isMarketplaceOrder: {
+      type: Boolean,
+      default: false,
+    },
+    isSubscriptionOrder: {
+      type: Boolean,
+      default: false,
+    },
+    subscriptionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Subscription',
+    },
+    groupOrderId: {
+      type: String,
+      default: '',
+    },
+    groupParticipants: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        name: String,
+        itemsSummary: String,
+      },
+    ],
     residentLocation: {
       type: {
         type: String,
